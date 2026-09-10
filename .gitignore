@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.jks
+wallet/
+.idea/
+.vscode/
+*.log
+Thumbs.db
