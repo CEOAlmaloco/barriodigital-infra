@@ -1,0 +1,12 @@
+# BarrioDigital — mq (ec2-mq)
+#
+# EP1: placeholder. RabbitMQ entra en Unidad 2 (colas + DLQ + notify).
+# No levanta broker todavía.
+#
+# Futuro (U2):
+#   - rabbitmq (nodo 1 / nodo 2 según el caso)
+#   - management UI (puerto 15672, solo ops)
+
+name: barriodigital-mq
+
+services: {}

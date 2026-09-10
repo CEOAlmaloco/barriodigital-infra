@@ -1,0 +1,18 @@
+# BarrioDigital — apps (ec2-apps)
+#
+# EP1: placeholder. Acá van a vivir los microservicios cuando tengan imagen Docker.
+# No levanta nada todavía. Completar en EP1-24 / despliegue EC2.
+#
+# Futuro (U1+):
+#   - ms-barriodigital-bff
+#   - ms-barriodigital-requests
+#   - ms-barriodigital-catalog
+# Futuro (U2+):
+#   - ms-barriodigital-notify
+# Futuro (U3+):
+#   - ms-barriodigital-report
+#   - ms-barriodigital-audit
+
+name: barriodigital-apps
+
+services: {}
