@@ -23,3 +23,11 @@
 | funcionario.test@cloudproyecto.onmicrosoft.com | Funcionario |
 | vecino.test@cloudproyecto.onmicrosoft.com | Vecino |
 | auditor.test@cloudproyecto.onmicrosoft.com | Auditor |
+
+## Contrato JWT
+
+- Claim de rol: `roles` (estándar de Microsoft Entra ID para App Roles asignados a usuarios)
+- Audience: `api://a0773f3e-abc6-4b53-86fc-9d33a2eddef3` (ver sección App Registration arriba)
+- Scopes: openid, profile (login básico vía MSAL)
+  - Scope custom (`access_as_user`) queda pendiente: no se creó en EP1, evaluar en EP2 si el API Gateway lo requiere.
+- El BFF valida issuer, audience y firma contra el token recibido; no valida un scope custom todavía, solo el claim `roles` para autorización.
