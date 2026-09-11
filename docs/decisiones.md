@@ -29,5 +29,5 @@
 - Claim de rol: `roles` (estándar de Microsoft Entra ID para App Roles asignados a usuarios)
 - Audience: `api://a0773f3e-abc6-4b53-86fc-9d33a2eddef3` (ver sección App Registration arriba)
 - Scopes: openid, profile (login básico vía MSAL)
-  - Scope custom (`access_as_user`) queda pendiente: no se creó en EP1, evaluar en EP2 si el API Gateway lo requiere.
+  - Scope custom `access_as_user`: en uso desde EP1. El frontend lo solicita en el login (msal-config.ts) junto con openid/profile, para que el accessToken tenga audience hacia la API y traiga el claim `roles`.
 - El BFF valida issuer, audience y firma contra el token recibido; no valida un scope custom todavía, solo el claim `roles` para autorización.
