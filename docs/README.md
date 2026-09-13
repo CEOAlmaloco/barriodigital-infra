@@ -4,10 +4,10 @@ Documentación compartida de BarrioDigital (no es un compose).
 
 | Archivo | Qué |
 |---------|-----|
-| `decisiones.md` | IDs de Entra ID / App Registration (EP1-01) |
+| `decisiones.md` | Entra ID, App Registration, contrato JWT, roles |
+| `arquitectura.md` | Diagrama EP1 (MSAL → BFF → requests → Oracle) |
 
 Pendiente de ir agregando:
 
-- Contrato JWT (roles, audience, scopes) — EP1-03
 - Notas de despliegue EC2 / security groups
-- Evidencias de demos por evaluación
+- Evidencias de demos por evaluación (`evidencias-ep1.md`, pack EP2)
