@@ -1,0 +1,35 @@
+# Compose plano para la EC2 (todo bajo ~/barriodigital)
+name: barriodigital-apps
+
+services:
+  requests:
+    build:
+      context: ./ms-barriodigital-requests
+      dockerfile: Dockerfile
+    container_name: bd-requests
+    ports:
+      - "8081:8081"
+    environment:
+      ORACLE_URL: ${ORACLE_URL}
+      ORACLE_USER: ${ORACLE_USER}
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD}
+      ORACLE_WALLET_DIR: /wallet
+    volumes:
+      - ./wallet:/wallet:ro
+    restart: unless-stopped
+
+  bff:
+    build:
+      context: ./ms-barriodigital-bff
+      dockerfile: Dockerfile
+    container_name: bd-bff
+    ports:
+      - "8080:8080"
+    environment:
+      AZURE_ISSUER_URI: ${AZURE_ISSUER_URI}
+      AZURE_AUDIENCES: ${AZURE_AUDIENCES}
+      REQUESTS_BASE_URL: http://requests:8081
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:4200}
+    depends_on:
+      - requests
+    restart: unless-stopped
