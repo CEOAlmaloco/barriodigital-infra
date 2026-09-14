@@ -1,0 +1,13 @@
+# BarrioDigital — kafka (ec2-kafka)
+#
+# EP1: placeholder. Kafka + Zookeeper entran en Unidad 3 (report + audit).
+# No levanta cluster todavía.
+#
+# Futuro (U3):
+#   - zookeeper (x3 según el caso)
+#   - kafka (x3 según el caso)
+#   - UI ops (restringida)
+
+name: barriodigital-kafka
+
+services: {}
