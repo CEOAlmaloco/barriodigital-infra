@@ -1,7 +1,7 @@
 # Arquitectura EP1 — BarrioDigital
 
-Recorte de la **Prueba 1**: login Microsoft + BFF con JWT + trámites en Oracle.  
-Lo que viene en EP2 (Gateway, front en S3/Amplify) se marca como “después”.
+Recorte de la **Prueba 1** tal como quedó desplegado: login Microsoft, front en Amplify, API Gateway con JWT Authorizer, BFF y trámites en Oracle.  
+Lo que sigue (EP2+) está al final. Las URLs concretas viven en `decisiones.md`.
 
 ## Vista en 30 segundos
 
@@ -16,12 +16,15 @@ flowchart LR
   end
 
   subgraph Front["frontend-barriodigital"]
-    ANG[Angular + MSAL<br/>localhost:4200]
+    ANG[Angular + MSAL<br/>Amplify Hosting]
   end
 
-  subgraph Back["EC2 / local — mundo apps"]
-    BFF[ms-barriodigital-bff<br/>:8080]
-    REQ[ms-barriodigital-requests<br/>:8081]
+  subgraph AWS["AWS"]
+    GW[API Gateway HTTP API<br/>barriodigital-api<br/>JWT Authorizer]
+    subgraph Back["EC2 — mundo apps, Docker Compose"]
+      BFF[ms-barriodigital-bff<br/>:8080]
+      REQ[ms-barriodigital-requests<br/>:8081]
+    end
   end
 
   subgraph Datos["Oracle Cloud"]
@@ -30,10 +33,13 @@ flowchart LR
 
   V -->|1. Login| AD
   AD -->|2. Access token JWT| ANG
-  ANG -->|3. Bearer JWT| BFF
-  BFF -->|4. HTTP + X-User-Id / X-User-Roles| REQ
-  REQ -->|5. JDBC| ORA
+  ANG -->|3. HTTPS + Bearer JWT| GW
+  GW -->|4. HTTP + Bearer JWT| BFF
+  BFF -->|5. HTTP + X-User-Id / X-User-Roles| REQ
+  REQ -->|6. JDBC| ORA
 ```
+
+En desarrollo local el front corre con `ng serve` en `http://localhost:4200` y le pega directo al BFF (`http://localhost:8080`), sin Gateway.
 
 ## Flujo de una petición autenticada
 
@@ -42,26 +48,28 @@ sequenceDiagram
   actor U as Usuario
   participant M as Entra ID
   participant F as Angular + MSAL
+  participant G as API Gateway
   participant B as BFF :8080
   participant R as requests :8081
   participant O as Oracle
 
   U->>F: Abrir app
   F->>M: Login (Authorization Code + PKCE)
-  M-->>F: Access token (iss v2, aud, roles)
+  M-->>F: Access token (iss v2, aud = GUID, roles)
   U->>F: Crear / listar trámite
-  F->>B: HTTPS/HTTP + Authorization Bearer
-  Note over B: Valida issuer, firma JWKS,<br/>exp, audience, roles
+  F->>G: HTTPS + Authorization Bearer
+  Note over G: JWT Authorizer: firma,<br/>issuer, audience, exp
   alt Token inválido o ausente
-    B-->>F: 401
-  else Sin permiso de rol
-    B-->>F: 403
-  else OK
+    G-->>F: 401 (no llega al BFF)
+  else Token válido
+    G->>B: HTTP + Authorization Bearer
+    Note over B: Valida de nuevo issuer, firma JWKS,<br/>exp, audience, roles
     B->>R: Proxy /api/requests<br/>headers X-User-Id, X-User-Roles
     R->>O: Persistencia JPA
     O-->>R: OK
     R-->>B: JSON
-    B-->>F: 200 / 201
+    B-->>G: 200 / 201
+    G-->>F: 200 / 201
   end
 ```
 
@@ -70,31 +78,29 @@ sequenceDiagram
 | Capa | Responsabilidad |
 |------|-----------------|
 | **Entra ID** | Identidad, App Roles (`Admin`, `Funcionario`, `Vecino`, `Auditor`), emite JWT |
-| **Angular + MSAL** | Login/logout, guarda token, manda `Authorization: Bearer` al BFF |
-| **BFF** | Resource Server: issuer, audience, firma, `exp`; CORS; proxy a requests; 401/403 |
+| **Angular + MSAL** | Login/logout, guarda token, manda `Authorization: Bearer` al API Gateway (en local, al BFF) |
+| **API Gateway** | JWT Authorizer: firma, issuer, audience (GUID) y `exp`; 401 sin llamar al BFF. Solo enruta las rutas publicadas (`decisiones.md`) |
+| **BFF** | Resource Server: vuelve a validar issuer, audience, firma y `exp`; roles → 403 en `/api/admin/**`; CORS; proxy a requests |
 | **requests** | CRUD trámites; filtra por dueño si es Vecino; **no** valida JWT (confía en headers del BFF) |
 | **Oracle** | Tabla de trámites; wallet fuera del repo |
 
 Contrato resumido (detalle en `decisiones.md`):
 
 - Issuer: `https://login.microsoftonline.com/<tenant>/v2.0`
-- Audience: GUID del client id y/o `api://<clientId>`
+- Audience: GUID del client id (lo que traen los tokens v2); el BFF acepta además `api://<clientId>`
 - Roles en claim `roles`
 - Scope API: `api://…/access_as_user`
 
 ## Qué NO entra en este dibujo (EP2+)
 
-- **API Gateway** delante del BFF (JWT en la nube + evidencias 401/200)
-- Front publicado (S3/Amplify) con redirect Entra de producción
 - Catalog completo, cambio de estado avanzado, Rabbit/Kafka
-
-En EP1 el front puede pegarle **directo al BFF** (`localhost:8080` o IP EC2). En EP2 apunta al Gateway.
 
 ## Despliegue de referencia (lab)
 
 | Pieza | Dónde |
 |-------|--------|
-| BFF + requests | Docker Compose en EC2 (o local) |
+| Front | AWS Amplify Hosting (producción); `ng serve` → `http://localhost:4200` (desarrollo) |
+| API Gateway | HTTP API `barriodigital-api` con JWT Authorizer, delante del BFF |
+| BFF + requests | Docker Compose en EC2 (`apps/compose.ec2.yml`) o local (`apps/compose.yml`) |
 | Oracle | Autonomous en OCI (no en AWS) |
 | Wallet | Volumen `/wallet`, no en Git |
-| Front EP1 | `ng serve` → `http://localhost:4200` |

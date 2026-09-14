@@ -7,23 +7,26 @@ Tres mundos Docker (uno por EC2) + documentación compartida.
 
 ```text
 barriodigital-infra/
-├── apps/compose.yml    # ec2-apps  → microservicios (BFF, requests, catalog, …)
-├── mq/compose.yml      # ec2-mq    → RabbitMQ (Unidad 2)
-├── kafka/compose.yml   # ec2-kafka → Kafka + ZK (Unidad 3)
-└── docs/               # decisiones, contratos JWT, evidencias
+├── apps/
+│   ├── compose.yml      # ec2-apps → BFF + requests, local con los repos como carpetas hermanas
+│   ├── compose.ec2.yml  # mismo stack con el layout plano de la EC2 (~/barriodigital)
+│   └── .env.example     # variables que necesitan ambos compose
+├── mq/compose.yml       # ec2-mq    → RabbitMQ (Unidad 2)
+├── kafka/compose.yml    # ec2-kafka → Kafka + ZK (Unidad 3)
+└── docs/                # decisiones (Entra ID, JWT, despliegue AWS) y arquitectura
 ```
 
 | Carpeta | EC2 | Cuándo se llena |
 |---------|-----|-----------------|
-| `apps/` | ec2-apps | EP1 (imágenes) → servicios del semestre |
+| `apps/` | ec2-apps | EP1: BFF + requests desplegados → servicios del semestre |
 | `mq/` | ec2-mq | Unidad 2 |
 | `kafka/` | ec2-kafka | Unidad 3 |
-| `docs/` | — | desde EP1 (Entra ID, JWT, arquitectura) |
+| `docs/` | — | desde EP1 (Entra ID, JWT, arquitectura, despliegue) |
 
-Los tres `compose.yml` existen desde EP1 como **placeholders** (`services: {}`).  
-Así el repo ya tiene el esqueleto del caso; no hace falta inventar nombres en EP2/EP3.
+`apps/` ya levanta BFF + requests (EP1-24); cómo hacerlo está en `apps/README.md`.  
+`mq/` y `kafka/` siguen como **placeholders** (`services: {}`) hasta U2/U3: así el repo ya tiene el esqueleto del caso y no hace falta inventar nombres después.
 
-## Cómo validar (EP1)
+## Cómo validar
 
 ```powershell
 docker compose -f apps/compose.yml config
@@ -31,17 +34,18 @@ docker compose -f mq/compose.yml config
 docker compose -f kafka/compose.yml config
 ```
 
+Sin un `.env` en `apps/`, Compose avisa que las variables vienen vacías; para validar la sintaxis es esperado.  
 No se espera `docker compose up` funcional de Rabbit/Kafka en EP1.
 
 ## Docs
 
-- `docs/decisiones.md` — App Registration Entra ID (EP1-01)
-- Más adelante: contrato JWT (EP1-03), notas de despliegue, etc.
+- `docs/decisiones.md` — App Registration de Entra ID, roles y usuarios de prueba, despliegue en AWS (URLs reales), contrato JWT y limitaciones conocidas
+- `docs/arquitectura.md` — diagramas del flujo Amplify → API Gateway → BFF → requests → Oracle
 
 ## Repos relacionados
 
 - `frontend-barriodigital`
 - `ms-barriodigital-bff`
 - `ms-barriodigital-requests`
-- `ms-barriodigital-catalog`
+- `ms-barriodigital-catalog` (pendiente)
 - `ms-barriodigital-notify` / `report` / `audit` (U2/U3)
