@@ -126,7 +126,7 @@ PUT /api/requests/{id}/status
 
 | Campo | Tipo | Nota |
 |---|---|---|
-| code | string | identificador de negocio, inmutable una vez creado, mismo valor que ya usan los trámites en procedureType |
+| value | string | identificador de negocio, inmutable una vez creado. Mismo nombre que ya usa el frontend en TipoTramiteOption.value, y que ProcedureTypes.java ya describe como "el código (value)" del contrato front-back |
 | label | string | texto a mostrar, en español, editable |
 | active | boolean | determina si el tipo de trámite está disponible para nuevas solicitudes |
 
@@ -134,7 +134,7 @@ Los campos de cupo (dailyQuota, remainingQuota, quotaResetDate) no forman parte 
 
 ### 2. Qué es editable
 
-code es inmutable, es la clave que usan los trámites existentes para referenciar el tipo. label y active son editables vía PUT.
+value es inmutable, es la clave que usan los trámites existentes para referenciar el tipo. label y active son editables vía PUT.
 
 ### 3. Endpoints y payload
 
@@ -142,8 +142,8 @@ GET /api/catalog/procedures, cualquier rol autenticado, sin filtro en el backend
 
 ```json
 [
-  { "code": "bache", "label": "Bache en la vía", "active": true },
-  { "code": "alumbrado", "label": "Alumbrado público", "active": true }
+  { "value": "bache", "label": "Bache en calle", "active": true },
+  { "value": "alumbrado", "label": "Alumbrado publico", "active": true }
 ]
 ```
 
@@ -152,12 +152,12 @@ El filtrado por active es responsabilidad del frontend, no del backend: el formu
 POST /api/catalog/procedures, solo Admin:
 
 ```json
-{ "code": "semaforo", "label": "Semáforo en mal estado", "active": true }
+{ "value": "semaforo", "label": "Semáforo en mal estado", "active": true }
 ```
 
 active es opcional, por defecto true si se omite. Respuesta 201 con el objeto creado.
 
-PUT /api/catalog/procedures/{code}, solo Admin, reemplazo completo de los campos editables, no parcial:
+PUT /api/catalog/procedures/{value}, solo Admin, reemplazo completo de los campos editables, no parcial:
 
 ```json
 { "label": "Semáforo intermitente", "active": false }
@@ -165,27 +165,28 @@ PUT /api/catalog/procedures/{code}, solo Admin, reemplazo completo de los campos
 
 Respuesta 200 con el objeto actualizado completo.
 
-### 4. Validación de code
+### 4. Validación de value
 
-Solo en POST, debe cumplir ^[a-z0-9_-]+$ (minúsculas, sin espacios ni tildes), mismo formato que los 6 códigos ya existentes (bache, alumbrado, basura, agua, ruido, otro).
+Solo en POST, debe cumplir ^[a-z0-9_-]+$ (minúsculas, sin espacios ni tildes), mismo formato que los 6 valores ya existentes (bache, alumbrado, basura, agua, ruido, otro).
 
 ### 5. Errores
 
 | Código | Causa |
 |---|---|
-| 400 | code ausente, vacío, o no cumple el patrón esperado (solo en POST) |
+| 400 | value ausente, vacío, o no cumple el patrón esperado (solo en POST) |
 | 400 | label ausente o vacío (POST y PUT) |
 | 403 | el rol no es Admin (POST y PUT) |
-| 404 | el code indicado en PUT no existe |
-| 409 | el code indicado en POST ya existe |
+| 404 | el value indicado en PUT no existe |
+| 409 | el value indicado en POST ya existe |
 
 ### 6. Por qué active y no DELETE
 
-La necesidad real es pausar y reanudar un tipo de trámite (por ejemplo, el municipio deja de recibir cierto tipo de solicitud directamente, o un trámite estacional se pausa fuera de temporada), no eliminarlo definitivamente. Con code inmutable y active como toggle, los trámites históricos de ese tipo nunca pierden su label ni su integridad, se puede reactivar sin recrear nada. Mismo patrón que usan Stripe Product y Price con su propio campo active: archivar no afecta lo que ya existe, solo bloquea uso nuevo.
+La necesidad real es pausar y reanudar un tipo de trámite (por ejemplo, el municipio deja de recibir cierto tipo de solicitud directamente, o un trámite estacional se pausa fuera de temporada), no eliminarlo definitivamente. Con value inmutable y active como toggle, los trámites históricos de ese tipo nunca pierden su label ni su integridad, se puede reactivar sin recrear nada. Mismo patrón que usan Stripe Product y Price con su propio campo active: archivar no afecta lo que ya existe, solo bloquea uso nuevo.
 
-### 7. Nota pendiente para EP1.5-09
+### 7. Notas pendientes para EP1.5-09
 
-Revisar si ms-barriodigital-catalog tiene el mismo problema detectado en EP1.5-04: server.error.include-message sin setear en su application.yml, lo que dejaría el campo message vacío en los errores 400/403/404/409 de este contrato.
+- Revisar si ms-barriodigital-catalog tiene el mismo problema detectado en EP1.5-04: server.error.include-message sin setear en su application.yml, lo que dejaría el campo message vacío en los errores 400/403/404/409 de este contrato.
+- Las labels de ProcedureTypes.java (ms-barriodigital-requests) y TIPOS_TRAMITE_PROVISIONAL (frontend-barriodigital) no coinciden exactamente para basura y ruido, y alumbrado difiere en tilde. Elegir una sola versión como dato semilla.
 
 ## Limitaciones conocidas (no bloqueantes)
 
