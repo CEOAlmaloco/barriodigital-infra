@@ -120,6 +120,73 @@ PUT /api/requests/{id}/status
 
 `application.yml` de `ms-barriodigital-requests` no tiene `server.error.include-message` seteado, el default de Spring Boot es `never`, por lo que el campo `message` del cuerpo de error venía vacío pese a que el código ya lanzaba el texto correcto. Esto afecta no solo al 409 nuevo, sino a los 400 y 404 que ya existían en `create()` y `getById()`. Se agrega `server.error.include-message: always` bajo `server:` (mismo nivel que `port`) como parte de EP1.5-04.
 
+## Contrato: catálogo de tipos de trámite (EP1.5-02)
+
+### 1. Modelo base
+
+| Campo | Tipo | Nota |
+|---|---|---|
+| code | string | identificador de negocio, inmutable una vez creado, mismo valor que ya usan los trámites en procedureType |
+| label | string | texto a mostrar, en español, editable |
+| active | boolean | determina si el tipo de trámite está disponible para nuevas solicitudes |
+
+Los campos de cupo (dailyQuota, remainingQuota, quotaResetDate) no forman parte de esta entidad ni de este contrato, se agregan en EP1.5-16 como migración aparte, según lo acordado en EP1.5-03.
+
+### 2. Qué es editable
+
+code es inmutable, es la clave que usan los trámites existentes para referenciar el tipo. label y active son editables vía PUT.
+
+### 3. Endpoints y payload
+
+GET /api/catalog/procedures, cualquier rol autenticado, sin filtro en el backend, devuelve siempre la lista completa (activos e inactivos):
+
+```json
+[
+  { "code": "bache", "label": "Bache en la vía", "active": true },
+  { "code": "alumbrado", "label": "Alumbrado público", "active": true }
+]
+```
+
+El filtrado por active es responsabilidad del frontend, no del backend: el formulario de creación de trámite (Vecino) filtra a active === true, mientras que la vista Admin de catálogo y cualquier resolución de label sobre un trámite ya existente usan la lista completa, para que un tipo desactivado no rompa el label de trámites históricos.
+
+POST /api/catalog/procedures, solo Admin:
+
+```json
+{ "code": "semaforo", "label": "Semáforo en mal estado", "active": true }
+```
+
+active es opcional, por defecto true si se omite. Respuesta 201 con el objeto creado.
+
+PUT /api/catalog/procedures/{code}, solo Admin, reemplazo completo de los campos editables, no parcial:
+
+```json
+{ "label": "Semáforo intermitente", "active": false }
+```
+
+Respuesta 200 con el objeto actualizado completo.
+
+### 4. Validación de code
+
+Solo en POST, debe cumplir ^[a-z0-9_-]+$ (minúsculas, sin espacios ni tildes), mismo formato que los 6 códigos ya existentes (bache, alumbrado, basura, agua, ruido, otro).
+
+### 5. Errores
+
+| Código | Causa |
+|---|---|
+| 400 | code ausente, vacío, o no cumple el patrón esperado (solo en POST) |
+| 400 | label ausente o vacío (POST y PUT) |
+| 403 | el rol no es Admin (POST y PUT) |
+| 404 | el code indicado en PUT no existe |
+| 409 | el code indicado en POST ya existe |
+
+### 6. Por qué active y no DELETE
+
+La necesidad real es pausar y reanudar un tipo de trámite (por ejemplo, el municipio deja de recibir cierto tipo de solicitud directamente, o un trámite estacional se pausa fuera de temporada), no eliminarlo definitivamente. Con code inmutable y active como toggle, los trámites históricos de ese tipo nunca pierden su label ni su integridad, se puede reactivar sin recrear nada. Mismo patrón que usan Stripe Product y Price con su propio campo active: archivar no afecta lo que ya existe, solo bloquea uso nuevo.
+
+### 7. Nota pendiente para EP1.5-09
+
+Revisar si ms-barriodigital-catalog tiene el mismo problema detectado en EP1.5-04: server.error.include-message sin setear en su application.yml, lo que dejaría el campo message vacío en los errores 400/403/404/409 de este contrato.
+
 ## Limitaciones conocidas (no bloqueantes)
 
 Notas de robustez detectadas durante el desarrollo, fuera de alcance de la EP1 por no representar fallas de los criterios de aceptación actuales.
