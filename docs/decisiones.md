@@ -126,19 +126,19 @@ PUT /api/requests/{id}/status
 
 | Campo | Tipo | Nota |
 |---|---|---|
-| value | string | identificador de negocio, inmutable una vez creado. Mismo nombre que ya usa el frontend en TipoTramiteOption.value, y que ProcedureTypes.java ya describe como "el código (value)" del contrato front-back |
+| value | string | identificador de negocio, inmutable una vez creado. Mismo nombre que ya usa el frontend en `TipoTramiteOption.value`, y que `ProcedureTypes.java` ya describe como "el código (value)" del contrato front-back |
 | label | string | texto a mostrar, en español, editable |
 | active | boolean | determina si el tipo de trámite está disponible para nuevas solicitudes |
 
-Los campos de cupo (dailyQuota, remainingQuota, quotaResetDate) no forman parte de esta entidad ni de este contrato, se agregan en EP1.5-16 como migración aparte, según lo acordado en EP1.5-03.
+Los campos de cupo (`dailyQuota`, `remainingQuota`, `quotaResetDate`) no forman parte de esta entidad ni de este contrato, se agregan en EP1.5-16 como migración aparte, según lo acordado en EP1.5-03.
 
 ### 2. Qué es editable
 
-value es inmutable, es la clave que usan los trámites existentes para referenciar el tipo. label y active son editables vía PUT.
+`value` es inmutable, es la clave que usan los trámites existentes para referenciar el tipo. `label` y `active` son editables vía `PUT`.
 
 ### 3. Endpoints y payload
 
-GET /api/catalog/procedures, cualquier rol autenticado, sin filtro en el backend, devuelve siempre la lista completa (activos e inactivos):
+`GET /api/catalog/procedures`, cualquier rol autenticado, sin filtro en el backend, devuelve siempre la lista completa (activos e inactivos):
 
 ```json
 [
@@ -147,27 +147,27 @@ GET /api/catalog/procedures, cualquier rol autenticado, sin filtro en el backend
 ]
 ```
 
-El filtrado por active es responsabilidad del frontend, no del backend: el formulario de creación de trámite (Vecino) filtra a active === true, mientras que la vista Admin de catálogo y cualquier resolución de label sobre un trámite ya existente usan la lista completa, para que un tipo desactivado no rompa el label de trámites históricos.
+El filtrado por active es responsabilidad del frontend, no del backend: el formulario de creación de trámite (Vecino) filtra a `active === true`, mientras que la vista Admin de catálogo y cualquier resolución de label sobre un trámite ya existente usan la lista completa, para que un tipo desactivado no rompa el label de trámites históricos.
 
-POST /api/catalog/procedures, solo Admin:
+`POST /api/catalog/procedures`, solo Admin:
 
 ```json
 { "value": "semaforo", "label": "Semáforo en mal estado", "active": true }
 ```
 
-active es opcional, por defecto true si se omite. Respuesta 201 con el objeto creado.
+`active` es opcional, por defecto `true` si se omite. Respuesta `201` con el objeto creado.
 
-PUT /api/catalog/procedures/{value}, solo Admin, reemplazo completo de los campos editables, no parcial:
+`PUT /api/catalog/procedures/{value}`, solo Admin, reemplazo completo de los campos editables, no parcial:
 
 ```json
 { "label": "Semáforo intermitente", "active": false }
 ```
 
-Respuesta 200 con el objeto actualizado completo.
+Respuesta `200` con el objeto actualizado completo.
 
 ### 4. Validación de value
 
-Solo en POST, debe cumplir ^[a-z0-9_-]+$ (minúsculas, sin espacios ni tildes), mismo formato que los 6 valores ya existentes (bache, alumbrado, basura, agua, ruido, otro).
+Solo en POST, debe cumplir `^[a-z0-9_-]+$` (minúsculas, sin espacios ni tildes), mismo formato que los 6 valores ya existentes (bache, alumbrado, basura, agua, ruido, otro).
 
 ### 5. Errores
 
@@ -185,8 +185,65 @@ La necesidad real es pausar y reanudar un tipo de trámite (por ejemplo, el muni
 
 ### 7. Notas pendientes para EP1.5-09
 
-- Revisar si ms-barriodigital-catalog tiene el mismo problema detectado en EP1.5-04: server.error.include-message sin setear en su application.yml, lo que dejaría el campo message vacío en los errores 400/403/404/409 de este contrato.
-- Las labels de ProcedureTypes.java (ms-barriodigital-requests) y TIPOS_TRAMITE_PROVISIONAL (frontend-barriodigital) no coinciden exactamente para basura y ruido, y alumbrado difiere en tilde. Elegir una sola versión como dato semilla.
+- Revisar si ms-barriodigital-catalog tiene el mismo problema detectado en EP1.5-04: `server.error.include-message` sin setear en su `application.yml`, lo que dejaría el campo `message` vacío en los errores 400/403/404/409 de este contrato.
+- Las labels de `ProcedureTypes.java` (ms-barriodigital-requests) y `TIPOS_TRAMITE_PROVISIONAL` (frontend-barriodigital) no coinciden exactamente para basura y ruido, y alumbrado difiere en tilde. Elegir una sola versión como dato semilla.
+
+## Contrato: cupos diarios (EP1.5-03)
+
+### 1. Dónde vive la lógica de descuento
+
+`catalog` mantiene su propio contador (`dailyQuota`, `remainingQuota`, `quotaResetDate`) con reset diario perezoso, **sin consultar nunca a `requests`**. El BFF orquesta la transición de `INGRESADO` a `ADMITIDO` llamando primero a `reserve` en catalog y después al cambio de estado en requests; si el cambio de estado falla después de reservar, el BFF llama a `release` como compensación.
+
+Ninguna otra transición de estado participa de la orquestación de cupo: el cupo reservado al admitir **nunca se libera automáticamente** por un `RECHAZADO` posterior, según lo ya establecido en el contrato de EP1.5-01.
+
+### 2. Campos
+
+| Campo | Tipo | Nota |
+|---|---|---|
+| `dailyQuota` | integer, nullable | `null` significa sin límite, `reserve` nunca falla por cupo para ese tipo. No se puede setear en POST (EP1.5-02), solo después vía PUT. |
+| `remainingQuota` | integer, nullable | refleja el cupo disponible hoy. `null` cuando `dailyQuota` es `null`. |
+| `quotaResetDate` | date | columna interna de persistencia, **no se serializa** en ninguna respuesta de la API. |
+
+**Reset perezoso:** en la primera llamada a `reserve` del día, si `quotaResetDate` es distinto a la fecha actual, se repone `remainingQuota` a `dailyQuota` y se actualiza `quotaResetDate`, antes de aplicar el descuento.
+
+### 3. Exposición en GET
+
+Una vez implementado este contrato, `GET /api/catalog/procedures` incluye `dailyQuota` y `remainingQuota` en cada ítem, `quotaResetDate` nunca se expone:
+
+```json
+{ "value": "bache", "label": "Bache en calle", "active": true, "dailyQuota": 20, "remainingQuota": 13 }
+```
+
+Para un tipo sin límite, ambos vienen en `null`.
+
+### 4. Endpoints
+
+```
+POST /api/catalog/procedures/{value}/reserve
+POST /api/catalog/procedures/{value}/release
+```
+
+Sin body en ninguno de los dos, la cantidad siempre es 1.
+
+- **`reserve`**: aplica el reset perezoso del punto 2 si corresponde, descuenta 1 de `remainingQuota` si hay cupo. Si `dailyQuota` es `null`, responde 200 sin modificar nada (no-op).
+- **`release`**: repone 1 a `remainingQuota`, con tope `remainingQuota = min(remainingQuota + 1, dailyQuota)`, para no superar el límite ante una compensación duplicada. Si `dailyQuota` es `null`, responde 200 sin modificar nada (no-op). **Nunca devuelve 409**, es una compensación que siempre debe poder ejecutarse.
+
+Respuesta en éxito (200) en ambos: el recurso completo actualizado, misma forma que un ítem de `GET /api/catalog/procedures`.
+
+### 5. Errores
+
+| Código | Causa |
+|---|---|
+| 404 | el `value` indicado no existe |
+| 409 | solo en `reserve`: `remainingQuota` es 0 después de aplicar el reset diario |
+
+### 6. Autenticación
+
+`reserve` y `release` **no validan rol ni JWT** dentro de catalog, confían en que solo el BFF los invoca, mismo modelo de confianza que ya usa `ms-barriodigital-requests` hoy. Esto asume que `ms-barriodigital-catalog` queda alcanzable solo desde la red interna de Docker Compose, ver nota del punto 7.
+
+### 7. Nota pendiente de infra: puerto de catalog en compose.yml
+
+El `compose.yml` actual de `apps/` publica el puerto de requests hacia el host (`ports: "8081:8081"`), no lo deja estrictamente interno, probablemente para poder probarlo directo con la colección de Postman durante desarrollo. Cuando se agregue catalog a este archivo, **queda como decisión abierta del equipo** si sigue el mismo patrón (`ports: "8082:8082"`) o si queda estrictamente interno (`expose: "8082"`, solo alcanzable por `bff` dentro de la red de Docker). Si catalog termina con el puerto publicado igual que requests, el diseño sin autenticación de `reserve`/`release` queda con el mismo nivel de riesgo que ya existe hoy en todos los endpoints de requests, no uno nuevo. El wiring de catalog en `compose.yml`, y la variable `CATALOG_BASE_URL` en el environment de bff (análoga a `REQUESTS_BASE_URL`), se trackean en EP1.5-09 y EP1.5-13 respectivamente.
 
 ## Limitaciones conocidas (no bloqueantes)
 
