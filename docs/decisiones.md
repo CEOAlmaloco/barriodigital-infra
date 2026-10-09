@@ -63,6 +63,19 @@
   - Scope custom `access_as_user`: en uso desde EP1. El frontend lo solicita en el login (msal-config.ts) junto con openid/profile, para que el accessToken tenga audience hacia la API y traiga el claim `roles`.
 - El BFF valida issuer, audience y firma contra el token recibido; no valida un scope custom todavía, solo el claim `roles` para autorización.
 
+## UI según el claim roles (EP1-07)
+
+El frontend lee `roles` del access token de la API (`AuthService.roles()`, scope `access_as_user`) y arma `/inicio` y el menú con eso. Es el mismo build para los cuatro usuarios de prueba. Ocultar un bloque no reemplaza la autorización: `/api/admin/**` sigue exigiendo Admin en el BFF (403 si el token no lo trae).
+
+| Rol | Inicio | Menú Trámites | Catálogo | Cambio de estado |
+|---|---|---|---|---|
+| Admin | Panel de administración | no | sí | sí |
+| Funcionario | Cola de admisión, enlace a `/tramites` | sí | no | no |
+| Vecino | Mis trámites, enlace a `/tramites` | sí | no | no |
+| Auditor | Auditoría, sin alta ni catálogo | no | no | no |
+
+El catálogo de tipos que ve el Admin es la lista provisional del formulario de trámites. Editar cupos queda para el microservicio de catálogo. No hay endpoint de cambio de estado en EP1: el Admin ve los estados del flujo y el Vecino no. El header repite el rol leído del token.
+
 ## Limitaciones conocidas (no bloqueantes)
 
 Notas de robustez detectadas durante el desarrollo, fuera de alcance de la EP1 por no representar fallas de los criterios de aceptación actuales.
