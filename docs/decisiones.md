@@ -245,6 +245,12 @@ Respuesta en éxito (200) en ambos: el recurso completo actualizado, misma forma
 
 El `compose.yml` actual de `apps/` publica el puerto de requests hacia el host (`ports: "8081:8081"`), no lo deja estrictamente interno, probablemente para poder probarlo directo con la colección de Postman durante desarrollo. Cuando se agregue catalog a este archivo, **queda como decisión abierta del equipo** si sigue el mismo patrón (`ports: "8082:8082"`) o si queda estrictamente interno (`expose: "8082"`, solo alcanzable por `bff` dentro de la red de Docker). Si catalog termina con el puerto publicado igual que requests, el diseño sin autenticación de `reserve`/`release` queda con el mismo nivel de riesgo que ya existe hoy en todos los endpoints de requests, no uno nuevo. El wiring de catalog en `compose.yml`, y la variable `CATALOG_BASE_URL` en el environment de bff (análoga a `REQUESTS_BASE_URL`), se trackean en EP1.5-09 y EP1.5-13 respectivamente.
 
+## Cupo diario nulo y día en Chile (EP1.5-03)
+
+`dailyQuota` y `remainingQuota` en null significan sin límite. El seed y el POST no ponen 10: un tipo nuevo no queda limitado hasta que el Admin lo pida. El día del reset es `America/Santiago`, no UTC, para que no cambie a las 20:00 o 21:00.
+
+El PUT reemplaza el cupo completo. Si el cuerpo no trae `dailyQuota`, el tipo pasa a sin límite. El frontend tiene que mandar siempre el campo cuando quiere conservar el número; si lo omite, lo saca. En Oracle, `ddl-auto: update` no relaja un NOT NULL ya creado: hace falta un `ALTER` manual de `daily_quota` y `remaining_quota`.
+
 ## Limitaciones conocidas (no bloqueantes)
 
 Notas de robustez detectadas durante el desarrollo, fuera de alcance de la EP1 por no representar fallas de los criterios de aceptación actuales.
