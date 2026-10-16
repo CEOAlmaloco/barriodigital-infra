@@ -1,0 +1,563 @@
+{
+  "info": {
+    "name": "BarrioDigital",
+    "description": "Importar en Postman (Import > Raw text o el archivo). Correr la colección en orden con Collection Runner.\n\nAntes: requests en http://localhost:8081, catalog en http://localhost:8082 (Maven; el compose no publica el 8082) y el BFF en http://localhost:8080.\n\nSin accessToken, la carpeta del BFF autenticado no exige 200. Para esos casos, pegar un access token de Entra en la variable accessToken de la colección.\n\nmq-admin y notify no están en esta colección: no hay servicio levantable.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "bffUrl", "value": "http://localhost:8080" },
+    { "key": "requestsUrl", "value": "http://localhost:8081" },
+    { "key": "catalogUrl", "value": "http://localhost:8082" },
+    { "key": "vecinoId", "value": "postman-vecino" },
+    { "key": "funcionarioId", "value": "postman-func" },
+    { "key": "requestId", "value": "" },
+    { "key": "procedureValue", "value": "" },
+    { "key": "accessToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "BFF health",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', function () { pm.response.to.have.status(200); });",
+            "pm.test('UP', function () { pm.expect(pm.response.json().status).to.eql('UP'); });"
+          ] } }],
+          "request": { "method": "GET", "url": "{{bffUrl}}/actuator/health" }
+        },
+        {
+          "name": "requests health",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', function () { pm.response.to.have.status(200); });",
+            "pm.test('UP', function () { pm.expect(pm.response.json().status).to.eql('UP'); });"
+          ] } }],
+          "request": { "method": "GET", "url": "{{requestsUrl}}/actuator/health" }
+        },
+        {
+          "name": "catalog health",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', function () { pm.response.to.have.status(200); });",
+            "pm.test('UP', function () { pm.expect(pm.response.json().status).to.eql('UP'); });"
+          ] } }],
+          "request": { "method": "GET", "url": "{{catalogUrl}}/actuator/health" }
+        }
+      ]
+    },
+    {
+      "name": "requests",
+      "item": [
+        {
+          "name": "Tipos fijos",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', function () { pm.response.to.have.status(200); });",
+            "pm.test('incluye bache', function () { pm.expect(pm.response.json()).to.have.property('bache'); });"
+          ] } }],
+          "request": { "method": "GET", "url": "{{requestsUrl}}/api/requests/meta/procedure-types" }
+        },
+        {
+          "name": "Transiciones",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', function () { pm.response.to.have.status(200); });",
+            "const body = pm.response.json();",
+            "pm.test('INGRESADO puede ADMITIDO', function () { pm.expect(body.INGRESADO).to.include('ADMITIDO'); });"
+          ] } }],
+          "request": { "method": "GET", "url": "{{requestsUrl}}/api/requests/meta/transitions" }
+        },
+        {
+          "name": "Crear trámite",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', function () { pm.response.to.have.status(201); });",
+            "const body = pm.response.json();",
+            "pm.test('queda INGRESADO', function () {",
+            "    pm.expect(body.id).to.be.a('string').and.not.empty;",
+            "    pm.expect(body.status).to.eql('INGRESADO');",
+            "    pm.expect(body.procedureType).to.eql('bache');",
+            "    pm.expect(body.solicitanteId).to.eql(pm.collectionVariables.get('vecinoId'));",
+            "});",
+            "pm.collectionVariables.set('requestId', body.id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Id", "value": "{{vecinoId}}" },
+              { "key": "X-User-Roles", "value": "Vecino" },
+              { "key": "X-User-Name", "value": "Vecino Postman" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"description\": \"Hueco frente al 123\",\n  \"procedureType\": \"bache\",\n  \"address\": \"Plaza Los Heroes\"\n}" },
+            "url": "{{requestsUrl}}/api/requests"
+          }
+        },
+        {
+          "name": "Crear sin identidad",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('400', function () { pm.response.to.have.status(400); });"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"description\": \"Sin usuario\",\n  \"procedureType\": \"bache\",\n  \"address\": \"Calle 1\"\n}" },
+            "url": "{{requestsUrl}}/api/requests"
+          }
+        },
+        {
+          "name": "Crear body vacío",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('400', function () { pm.response.to.have.status(400); });"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Id", "value": "{{vecinoId}}" },
+              { "key": "X-User-Roles", "value": "Vecino" }
+            ],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": "{{requestsUrl}}/api/requests"
+          }
+        },
+        {
+          "name": "Obtener por id",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', function () { pm.response.to.have.status(200); });",
+            "pm.test('es el creado', function () {",
+            "    pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('requestId'));",
+            "});"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-User-Id", "value": "{{vecinoId}}" },
+              { "key": "X-User-Roles", "value": "Vecino" }
+            ],
+            "url": "{{requestsUrl}}/api/requests/{{requestId}}"
+          }
+        },
+        {
+          "name": "Obtener id inexistente",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('404', function () { pm.response.to.have.status(404); });"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-User-Id", "value": "{{funcionarioId}}" },
+              { "key": "X-User-Roles", "value": "Funcionario" }
+            ],
+            "url": "{{requestsUrl}}/api/requests/00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "name": "Listar como vecino",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', function () { pm.response.to.have.status(200); });",
+            "const ids = pm.response.json().map(function (row) { return row.id; });",
+            "pm.test('ve el suyo', function () { pm.expect(ids).to.include(pm.collectionVariables.get('requestId')); });"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-User-Id", "value": "{{vecinoId}}" },
+              { "key": "X-User-Roles", "value": "Vecino" }
+            ],
+            "url": "{{requestsUrl}}/api/requests"
+          }
+        },
+        {
+          "name": "Listar como funcionario",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', function () { pm.response.to.have.status(200); });",
+            "const ids = pm.response.json().map(function (row) { return row.id; });",
+            "pm.test('ve el trámite', function () { pm.expect(ids).to.include(pm.collectionVariables.get('requestId')); });"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-User-Id", "value": "{{funcionarioId}}" },
+              { "key": "X-User-Roles", "value": "Funcionario" }
+            ],
+            "url": "{{requestsUrl}}/api/requests?status=INGRESADO"
+          }
+        },
+        {
+          "name": "Vecino no cambia estado",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', function () { pm.response.to.have.status(403); });"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Id", "value": "{{vecinoId}}" },
+              { "key": "X-User-Roles", "value": "Vecino" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"ADMITIDO\"\n}" },
+            "url": "{{requestsUrl}}/api/requests/{{requestId}}/status"
+          }
+        },
+        {
+          "name": "Rechazo sin motivo",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('400', function () { pm.response.to.have.status(400); });"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Id", "value": "{{funcionarioId}}" },
+              { "key": "X-User-Roles", "value": "Funcionario" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"RECHAZADO\"\n}" },
+            "url": "{{requestsUrl}}/api/requests/{{requestId}}/status"
+          }
+        },
+        {
+          "name": "Transición inválida",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', function () { pm.response.to.have.status(409); });"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Id", "value": "{{funcionarioId}}" },
+              { "key": "X-User-Roles", "value": "Funcionario" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"RESUELTO\"\n}" },
+            "url": "{{requestsUrl}}/api/requests/{{requestId}}/status"
+          }
+        },
+        {
+          "name": "Admitir",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', function () { pm.response.to.have.status(200); });",
+            "pm.test('ADMITIDO', function () { pm.expect(pm.response.json().status).to.eql('ADMITIDO'); });"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Id", "value": "{{funcionarioId}}" },
+              { "key": "X-User-Roles", "value": "Funcionario" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"ADMITIDO\"\n}" },
+            "url": "{{requestsUrl}}/api/requests/{{requestId}}/status"
+          }
+        },
+        {
+          "name": "Pasar a EN_GESTION",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', function () { pm.response.to.have.status(200); });",
+            "pm.test('EN_GESTION', function () { pm.expect(pm.response.json().status).to.eql('EN_GESTION'); });"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Id", "value": "{{funcionarioId}}" },
+              { "key": "X-User-Roles", "value": "Funcionario" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"EN_GESTION\"\n}" },
+            "url": "{{requestsUrl}}/api/requests/{{requestId}}/status"
+          }
+        }
+      ]
+    },
+    {
+      "name": "catalog",
+      "item": [
+        {
+          "name": "Listar tipos",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', function () { pm.response.to.have.status(200); });",
+            "const values = pm.response.json().map(function (row) { return row.value; });",
+            "pm.test('incluye bache', function () { pm.expect(values).to.include('bache'); });"
+          ] } }],
+          "request": { "method": "GET", "url": "{{catalogUrl}}/api/catalog/procedures" }
+        },
+        {
+          "name": "Crear sin Admin",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', function () { pm.response.to.have.status(403); });"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Roles", "value": "Vecino" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"value\": \"noadmin\",\n  \"label\": \"No admin\"\n}" },
+            "url": "{{catalogUrl}}/api/catalog/procedures"
+          }
+        },
+        {
+          "name": "Crear nombre inválido",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('400', function () { pm.response.to.have.status(400); });"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Roles", "value": "Admin" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"value\": \"Bache Malo\",\n  \"label\": \"Invalido\"\n}" },
+            "url": "{{catalogUrl}}/api/catalog/procedures"
+          }
+        },
+        {
+          "name": "Crear tipo",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "pm.collectionVariables.set('procedureValue', 'pm' + Date.now());"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('201', function () { pm.response.to.have.status(201); });",
+              "const body = pm.response.json();",
+              "pm.test('sin cupo', function () {",
+              "    pm.expect(body.value).to.eql(pm.collectionVariables.get('procedureValue'));",
+              "    pm.expect(body.active).to.eql(true);",
+              "    pm.expect(body.dailyQuota).to.eql(null);",
+              "});"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Roles", "value": "Admin" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"value\": \"{{procedureValue}}\",\n  \"label\": \"Tipo Postman\"\n}" },
+            "url": "{{catalogUrl}}/api/catalog/procedures"
+          }
+        },
+        {
+          "name": "Crear duplicado",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', function () { pm.response.to.have.status(409); });"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Roles", "value": "Admin" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"value\": \"{{procedureValue}}\",\n  \"label\": \"Otra vez\"\n}" },
+            "url": "{{catalogUrl}}/api/catalog/procedures"
+          }
+        },
+        {
+          "name": "Editar tipo",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', function () { pm.response.to.have.status(200); });",
+            "const body = pm.response.json();",
+            "pm.test('cupo 5', function () {",
+            "    pm.expect(body.label).to.eql('Tipo Postman editado');",
+            "    pm.expect(body.dailyQuota).to.eql(5);",
+            "    pm.expect(body.remainingQuota).to.eql(5);",
+            "});"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Roles", "value": "Admin" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"label\": \"Tipo Postman editado\",\n  \"active\": true,\n  \"dailyQuota\": 5\n}" },
+            "url": "{{catalogUrl}}/api/catalog/procedures/{{procedureValue}}"
+          }
+        },
+        {
+          "name": "Editar inexistente",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('404', function () { pm.response.to.have.status(404); });"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Roles", "value": "Admin" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"label\": \"Nadie\",\n  \"active\": true\n}" },
+            "url": "{{catalogUrl}}/api/catalog/procedures/no-existe-pm"
+          }
+        },
+        {
+          "name": "Reservar",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', function () { pm.response.to.have.status(200); });",
+            "pm.test('queda 4', function () { pm.expect(pm.response.json().remainingQuota).to.eql(4); });"
+          ] } }],
+          "request": { "method": "POST", "url": "{{catalogUrl}}/api/catalog/procedures/{{procedureValue}}/reserve" }
+        },
+        {
+          "name": "Liberar",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', function () { pm.response.to.have.status(200); });",
+            "pm.test('vuelve a 5', function () { pm.expect(pm.response.json().remainingQuota).to.eql(5); });"
+          ] } }],
+          "request": { "method": "POST", "url": "{{catalogUrl}}/api/catalog/procedures/{{procedureValue}}/release" }
+        },
+        {
+          "name": "Reservar inexistente",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('404', function () { pm.response.to.have.status(404); });"
+          ] } }],
+          "request": { "method": "POST", "url": "{{catalogUrl}}/api/catalog/procedures/no-existe-pm/reserve" }
+        }
+      ]
+    },
+    {
+      "name": "BFF sin token",
+      "item": [
+        {
+          "name": "Ping",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('401', function () { pm.response.to.have.status(401); });"
+          ] } }],
+          "request": { "method": "GET", "url": "{{bffUrl}}/api/ping" }
+        },
+        {
+          "name": "Admin ping",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('401', function () { pm.response.to.have.status(401); });"
+          ] } }],
+          "request": { "method": "GET", "url": "{{bffUrl}}/api/admin/ping" }
+        },
+        {
+          "name": "Listar trámites",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('401', function () { pm.response.to.have.status(401); });"
+          ] } }],
+          "request": { "method": "GET", "url": "{{bffUrl}}/api/requests" }
+        },
+        {
+          "name": "Transiciones",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('401', function () { pm.response.to.have.status(401); });"
+          ] } }],
+          "request": { "method": "GET", "url": "{{bffUrl}}/api/requests/meta/transitions" }
+        },
+        {
+          "name": "Listar catálogo",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('401', function () { pm.response.to.have.status(401); });"
+          ] } }],
+          "request": { "method": "GET", "url": "{{bffUrl}}/api/catalog/procedures" }
+        },
+        {
+          "name": "Crear tipo",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('401', function () { pm.response.to.have.status(401); });"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"value\": \"x\",\n  \"label\": \"X\"\n}" },
+            "url": "{{bffUrl}}/api/catalog/procedures"
+          }
+        },
+        {
+          "name": "Cambiar estado",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('401', function () { pm.response.to.have.status(401); });"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"ADMITIDO\"\n}" },
+            "url": "{{bffUrl}}/api/requests/{{requestId}}/status"
+          }
+        }
+      ]
+    },
+    {
+      "name": "BFF con token",
+      "item": [
+        {
+          "name": "Ping",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const token = pm.collectionVariables.get('accessToken');",
+            "if (!token) { pm.test.skip('Falta accessToken'); }",
+            "else {",
+            "    pm.test('200', function () { pm.response.to.have.status(200); });",
+            "    pm.test('ok', function () { pm.expect(pm.response.json().status).to.eql('ok'); });",
+            "}"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": "{{bffUrl}}/api/ping"
+          }
+        },
+        {
+          "name": "Listar catálogo",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const token = pm.collectionVariables.get('accessToken');",
+            "if (!token) { pm.test.skip('Falta accessToken'); }",
+            "else {",
+            "    pm.test('200', function () { pm.response.to.have.status(200); });",
+            "    pm.test('es lista', function () { pm.expect(pm.response.json()).to.be.an('array'); });",
+            "}"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": "{{bffUrl}}/api/catalog/procedures"
+          }
+        },
+        {
+          "name": "Listar trámites",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const token = pm.collectionVariables.get('accessToken');",
+            "if (!token) { pm.test.skip('Falta accessToken'); }",
+            "else {",
+            "    pm.test('200', function () { pm.response.to.have.status(200); });",
+            "    pm.test('es lista', function () { pm.expect(pm.response.json()).to.be.an('array'); });",
+            "}"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": "{{bffUrl}}/api/requests"
+          }
+        },
+        {
+          "name": "Transiciones",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const token = pm.collectionVariables.get('accessToken');",
+            "if (!token) { pm.test.skip('Falta accessToken'); }",
+            "else {",
+            "    pm.test('200', function () { pm.response.to.have.status(200); });",
+            "    pm.test('INGRESADO', function () { pm.expect(pm.response.json().INGRESADO).to.include('ADMITIDO'); });",
+            "}"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": "{{bffUrl}}/api/requests/meta/transitions"
+          }
+        },
+        {
+          "name": "Crear trámite",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const token = pm.collectionVariables.get('accessToken');",
+            "if (!token) { pm.test.skip('Falta accessToken'); }",
+            "else {",
+            "    pm.test('201', function () { pm.response.to.have.status(201); });",
+            "    pm.test('INGRESADO', function () { pm.expect(pm.response.json().status).to.eql('INGRESADO'); });",
+            "}"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"description\": \"Alta desde el BFF\",\n  \"procedureType\": \"bache\",\n  \"address\": \"Calle Postman 10\"\n}" },
+            "url": "{{bffUrl}}/api/requests"
+          }
+        }
+      ]
+    }
+  ]
+}
