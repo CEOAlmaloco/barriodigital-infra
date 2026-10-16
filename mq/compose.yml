@@ -1,12 +1,59 @@
-# BarrioDigital — mq (ec2-mq)
+# BarrioDigital — RabbitMQ, dos nodos (ec2-mq, local)
 #
-# EP1: placeholder. RabbitMQ entra en Unidad 2 (colas + DLQ + notify).
-# No levanta broker todavía.
+#   copy .env.example .env
+#   docker compose -f mq/compose.yml up -d
 #
-# Futuro (U2):
-#   - rabbitmq (nodo 1 / nodo 2 según el caso)
-#   - management UI (puerto 15672, solo ops)
+# 5672 (AMQP) y 15672 (Management) solo en 127.0.0.1, y solo desde el nodo 1.
+# El nodo 2 no publica puertos: se habla con el 1 por la red del compose.
+# Credenciales y cookie: mq/.env (plantilla en .env.example). Nunca en git.
 
 name: barriodigital-mq
 
-services: {}
+services:
+  rabbitmq-1:
+    image: rabbitmq:3.12-management-alpine
+    container_name: rabbitmq-1
+    hostname: rabbitmq-1
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?Definir mq/.env a partir de mq/.env.example}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?Definir mq/.env a partir de mq/.env.example}
+      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE:?Definir mq/.env a partir de mq/.env.example}
+    volumes:
+      - rabbitmq_data_1:/var/lib/rabbitmq
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+    restart: unless-stopped
+
+  rabbitmq-2:
+    image: rabbitmq:3.12-management-alpine
+    container_name: rabbitmq-2
+    hostname: rabbitmq-2
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?Definir mq/.env a partir de mq/.env.example}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?Definir mq/.env a partir de mq/.env.example}
+      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE:?Definir mq/.env a partir de mq/.env.example}
+    volumes:
+      - rabbitmq_data_2:/var/lib/rabbitmq
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    depends_on:
+      rabbitmq-1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "await_online_nodes", "2"]
+      interval: 10s
+      timeout: 15s
+      retries: 12
+      start_period: 40s
+    restart: unless-stopped
+
+volumes:
+  rabbitmq_data_1:
+  rabbitmq_data_2:
