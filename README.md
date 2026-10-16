@@ -47,5 +47,5 @@ No se espera `docker compose up` funcional de Rabbit/Kafka en EP1.
 - `frontend-barriodigital`
 - `ms-barriodigital-bff`
 - `ms-barriodigital-requests`
-- `ms-barriodigital-catalog` (pendiente)
+- `ms-barriodigital-catalog`
 - `ms-barriodigital-notify` / `report` / `audit` (U2/U3)

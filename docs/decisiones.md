@@ -28,9 +28,16 @@
 
 ## Despliegue en AWS
 
-- BFF y ms-barriodigital-requests corren vía Docker Compose en una EC2 de AWS
-  Academy Learner Lab (`apps/compose.ec2.yml`). Si se recrea la instancia cambia
-  su IP pública, y hay que actualizar la integración del API Gateway hacia el BFF.
+- BFF, ms-barriodigital-requests y ms-barriodigital-catalog corren vía Docker
+  Compose en una EC2 de AWS Academy Learner Lab (`apps/compose.ec2.yml`). Si se
+  recrea la instancia cambia su IP pública, y hay que actualizar la integración
+  del API Gateway hacia el BFF.
+- catalog no publica puerto: `expose: "8082"`, sin `ports`. El BFF lo llama con
+  `CATALOG_BASE_URL=http://catalog:8082`. `reserve` y `release` no validan JWT
+  y solo son alcanzables dentro de la red del compose.
+- El orden de despliegue es catalog primero y el BFF después. El compose espera
+  a que el health de catalog esté UP antes de arrancar el BFF. Si se recrea el
+  BFF mientras catalog no responde, el alta de trámites responde 503.
 - API Gateway (HTTP API `barriodigital-api`), Invoke URL: https://dfcq1q4noj.execute-api.us-east-1.amazonaws.com
   - Reenvía al BFF en el puerto 8080 de la EC2.
   - JWT Authorizer: issuer https://login.microsoftonline.com/ce6e98c4-63f0-4b79-83e5-20925b5fada2/v2.0,
@@ -42,8 +49,8 @@
     (`404-200` a `/index.html`) para las rutas de Angular.
   - Se descartó CloudFront + S3 porque cloudfront:CreateDistribution no está
     permitido en el rol del Learner Lab.
-- Oracle Autonomous Database vive en OCI, no en AWS. El wallet se monta en el
-  contenedor de requests como volumen (`/wallet`) y nunca va a Git.
+- Oracle Autonomous Database vive en OCI, no en AWS. El wallet se monta en los
+  contenedores de requests y de catalog como volumen (`/wallet`) y nunca va a Git.
 
 ## Contrato JWT
 
@@ -239,11 +246,13 @@ Respuesta en éxito (200) en ambos: el recurso completo actualizado, misma forma
 
 ### 6. Autenticación
 
-`reserve` y `release` **no validan rol ni JWT** dentro de catalog, confían en que solo el BFF los invoca, mismo modelo de confianza que ya usa `ms-barriodigital-requests` hoy. Esto asume que `ms-barriodigital-catalog` queda alcanzable solo desde la red interna de Docker Compose, ver nota del punto 7.
+`reserve` y `release` **no validan rol ni JWT** dentro de catalog, confían en que solo el BFF los invoca. Por eso catalog no se publica al host, ver el punto 7.
 
-### 7. Nota pendiente de infra: puerto de catalog en compose.yml
+### 7. Catalog en el compose, sin puerto público
 
-El `compose.yml` actual de `apps/` publica el puerto de requests hacia el host (`ports: "8081:8081"`), no lo deja estrictamente interno, probablemente para poder probarlo directo con la colección de Postman durante desarrollo. Cuando se agregue catalog a este archivo, **queda como decisión abierta del equipo** si sigue el mismo patrón (`ports: "8082:8082"`) o si queda estrictamente interno (`expose: "8082"`, solo alcanzable por `bff` dentro de la red de Docker). Si catalog termina con el puerto publicado igual que requests, el diseño sin autenticación de `reserve`/`release` queda con el mismo nivel de riesgo que ya existe hoy en todos los endpoints de requests, no uno nuevo. El wiring de catalog en `compose.yml`, y la variable `CATALOG_BASE_URL` en el environment de bff (análoga a `REQUESTS_BASE_URL`), se trackean en EP1.5-09 y EP1.5-13 respectivamente.
+catalog usa `expose: "8082"` y no tiene `ports`, en `apps/compose.yml` y en `apps/compose.ec2.yml`. Solo lo alcanza el BFF, con `CATALOG_BASE_URL=http://catalog:8082`. requests sigue publicado en el 8081 para el health local; el security group de la EC2 no abre ese puerto ni el 8082.
+
+El BFF declara `depends_on` de catalog con `condition: service_healthy`. Catalog tiene que estar UP antes de que el BFF arranque. Si se redespliega el BFF primero, el alta de trámites responde 503 porque catalog no valida el tipo a tiempo.
 
 ## Cupo diario nulo y día en Chile (EP1.5-03)
 

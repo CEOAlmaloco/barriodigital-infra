@@ -1,10 +1,10 @@
-# apps/ — ec2-apps (BFF + requests)
+# apps/ — ec2-apps (BFF + requests + catalog)
 
 Compose del mundo **apps** (una EC2). Cada microservicio trae su propio `Dockerfile` en su repo.
 
 ## Local (repos hermanos)
 
-Desde esta carpeta, con `ms-barriodigital-bff` y `ms-barriodigital-requests` al mismo nivel que `barriodigital-infra`:
+Desde esta carpeta, con `ms-barriodigital-bff`, `ms-barriodigital-requests` y `ms-barriodigital-catalog` al mismo nivel que `barriodigital-infra`:
 
 ```bash
 cp .env.example .env   # y completa los valores
@@ -17,7 +17,7 @@ curl -i http://localhost:8081/actuator/health
 
 ## EC2 (layout plano `~/barriodigital`)
 
-Usar `compose.ec2.yml` cuando BFF, requests, wallet y `.env` viven juntos:
+Usar `compose.ec2.yml` cuando BFF, requests, catalog, wallet y `.env` viven juntos. Catalog se construye antes y el BFF espera su health: si se recrea el BFF con catalog caído, el alta responde 503.
 
 ```bash
 docker compose -f compose.ec2.yml --env-file .env up -d --build
@@ -35,8 +35,10 @@ Plantilla en `.env.example`; los valores de Entra ID están en `../docs/decision
 | `ORACLE_USER`, `ORACLE_PASSWORD` | Usuario de la aplicación en Oracle. Si la password tiene `$`, en este `.env` va como `$$` |
 | `CORS_ALLOWED_ORIGINS` | Orígenes del front separados por coma; por defecto `http://localhost:4200` |
 | `WALLET_HOST_PATH` | Solo `compose.yml`: ruta del wallet en el host; por defecto `./wallet` |
+| `CATALOG_BASE_URL` | `http://catalog:8082`. El compose se la pasa al BFF. Catalog usa las mismas `ORACLE_*` y el mismo wallet |
 
 ## Puertos
 
 - **BFF, 8080.** En producción el front no lo llama directo: las peticiones entran por el API Gateway, que las reenvía a este puerto (ver `../docs/decisiones.md`).
 - **requests, 8081.** Los dos compose lo publican en el host (sirve para el health check local), así que en la EC2 el security group no debe abrir el 8081, solo el 8080.
+- **catalog, 8082.** Solo `expose`, sin `ports`. No se abre en el security group. El health se mira dentro del contenedor: `docker compose exec catalog curl -f http://localhost:8082/actuator/health`.
