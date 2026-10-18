@@ -36,6 +36,22 @@ services:
       start_period: 60s
     restart: unless-stopped
 
+  mq-admin:
+    build:
+      context: ./ms-barriodigital-mq-admin
+      dockerfile: Dockerfile
+    container_name: bd-mq-admin
+    expose:
+      - "8084"
+    environment:
+      RABBITMQ_HOST: ${RABBITMQ_HOST:?Definir IP privada de EC2-MQ}
+      RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+      RABBITMQ_USER: ${RABBIT_USER:-barriodigital}
+      RABBITMQ_PASSWORD: ${RABBIT_PASSWORD:?Definir RABBIT_PASSWORD}
+      RABBITMQ_MANAGEMENT_URL: ${RABBITMQ_MANAGEMENT_URL:?Definir URL del Management}
+      RABBITMQ_VHOST: ${RABBITMQ_VHOST:-/}
+    restart: unless-stopped
+
   requests:
     build:
       context: ./ms-barriodigital-requests
@@ -48,8 +64,14 @@ services:
       ORACLE_USER: ${ORACLE_USER}
       ORACLE_PASSWORD: ${ORACLE_PASSWORD}
       ORACLE_WALLET_DIR: /wallet
+      RABBIT_ADDRESSES: ${RABBIT_ADDRESSES:?Definir endpoint privado de EC2-MQ}
+      RABBIT_USER: ${RABBIT_USER:-barriodigital}
+      RABBIT_PASSWORD: ${RABBIT_PASSWORD:?Definir RABBIT_PASSWORD}
     volumes:
       - ./wallet:/wallet:ro
+    depends_on:
+      notify:
+        condition: service_healthy
     restart: unless-stopped
 
   catalog:
@@ -86,6 +108,7 @@ services:
       AZURE_AUDIENCES: ${AZURE_AUDIENCES}
       REQUESTS_BASE_URL: http://requests:8081
       CATALOG_BASE_URL: http://catalog:8082
+      MQ_ADMIN_BASE_URL: ${MQ_ADMIN_BASE_URL:-http://mq-admin:8084}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:4200}
     depends_on:
       requests:
