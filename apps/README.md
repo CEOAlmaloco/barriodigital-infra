@@ -98,7 +98,7 @@ En ambos entornos `CERTIFICATE_OUTPUT_DIR=/app/data/certificates` coincide con e
 
 La imagen mantiene el usuario de su base, root por defecto, y prepara el directorio. No necesita permisos 777. Comprobar el UID y la escritura sobre el montaje real después de construir. El generador escribe un temporal en ese mismo directorio y publica mediante movimiento atómico; un proveedor sin esa capacidad produce error recuperable, sin escritura directa sobre el PDF final.
 
-## Comprobación manual de topología de email y cuadrillas
+## Comprobación manual de topología de email, cuadrillas y certificados
 
 Después de iniciar MQ y Notify, comprobar el health desde Apps. En local, desde esta carpeta:
 
@@ -137,9 +137,13 @@ Los comandos deben terminar correctamente. Revisar los siguientes valores antes 
 | `q.cmd.crew.dlq` | Durable `true`, auto-delete `false`, argumentos vacíos y ningún consumidor |
 | Binding principal de cuadrillas | Origen `cmd.direct`, destino de tipo `queue` `q.cmd.crew`, routing key `crew.ticket`, argumentos vacíos |
 | Binding DLQ de cuadrillas | Origen `cmd.dead.dlx`, destino de tipo `queue` `q.cmd.crew.dlq`, routing key `crew.dead`, argumentos vacíos |
+| `q.cmd.certificate` | Durable `true`, auto-delete `false`, `x-dead-letter-exchange=cmd.dead.dlx` y `x-dead-letter-routing-key=certificate.dead` |
+| `q.cmd.certificate.dlq` | Durable `true`, auto-delete `false`, argumentos vacíos y ningún consumidor |
+| Binding principal de certificados | Origen `cmd.topic`, destino de tipo `queue` `q.cmd.certificate`, routing key `certificate.*`, argumentos vacíos; cubre `certificate.receipt` y `certificate.resolved` |
+| Binding DLQ de certificados | Origen `cmd.dead.dlx`, destino de tipo `queue` `q.cmd.certificate.dlq`, routing key `certificate.dead`, argumentos vacíos |
 
 Las colas siguen el contrato de colas clásicas. Con una instancia de Notify se espera un consumidor en
-cada una de `q.cmd.email` y `q.cmd.crew`, y ninguno en sus DLQ; su presencia no sustituye la revisión de
+cada una de `q.cmd.email`, `q.cmd.crew` y `q.cmd.certificate`, y ninguno en sus DLQ; su presencia no sustituye la revisión de
 recursos y enlaces. Estas consultas utilizan los
 permisos operativos existentes en el host MQ y la cookie del contenedor; no añaden permisos administrativos
 al usuario AMQP de Requests. Management permanece en loopback.
