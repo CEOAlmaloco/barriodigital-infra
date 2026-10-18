@@ -6,6 +6,7 @@ Documentación compartida de BarrioDigital (no es un compose).
 |---------|-----|
 | `decisiones.md` | Entra ID (App Registration, redirect URIs), roles y usuarios de prueba, despliegue en AWS (URLs), contrato JWT, limitaciones conocidas |
 | `arquitectura.md` | Diagramas del flujo desplegado (Amplify → API Gateway → BFF → requests → Oracle) |
+| `matriz-funcionalidades.md` | Estado real de cada funcionalidad, con componente y evidencia |
 
 Pendiente de ir agregando:
 
