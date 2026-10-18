@@ -59,8 +59,17 @@ services:
       ORACLE_USER: ${ORACLE_USER}
       ORACLE_PASSWORD: ${ORACLE_PASSWORD}
       ORACLE_WALLET_DIR: /wallet
+      RABBIT_ADDRESSES: ${RABBIT_ADDRESSES:-rabbitmq-1:5672,rabbitmq-2:5672}
+      RABBIT_USER: ${RABBIT_USER:-barriodigital}
+      RABBIT_PASSWORD: ${RABBIT_PASSWORD:?Definir RABBIT_PASSWORD}
     volumes:
       - ${WALLET_HOST_PATH:-./wallet}:/wallet:ro
+    networks:
+      - default
+      - mq
+    depends_on:
+      notify:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
       interval: 20s

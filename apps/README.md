@@ -4,13 +4,32 @@ Compose del mundo **apps** (una EC2). Cada microservicio trae su propio `Dockerf
 
 ## Local (repos hermanos)
 
-Desde esta carpeta, con los repositorios de BFF, requests, catalog y notify al mismo nivel que `barriodigital-infra`. Arrancar MQ primero: Notify se conecta a su red externa ya existente, no usa `depends_on` entre proyectos.
+Desde esta carpeta, con los repositorios de BFF, requests, catalog y notify al mismo nivel que `barriodigital-infra`. El arranque y la recuperación habituales utilizan Docker Compose.
+
+Requiere Docker con Compose y soporte `--wait`, credenciales Oracle, wallet de Autonomous y configuración
+Entra del BFF. Para la primera configuración, crear los entornos desde las plantillas versionadas:
 
 ```bash
-cp .env.example .env   # y completa los valores
-docker compose -f ../mq/compose.yml --env-file ../mq/.env up -d
-# wallet descomprimido en ./wallet (o WALLET_HOST_PATH)
+cp .env.example .env
+cp ../mq/.env.example ../mq/.env
+```
+
+Completar ambos archivos antes de continuar. `RABBIT_USER` y `RABBIT_PASSWORD` de Apps deben coincidir con
+`RABBITMQ_DEFAULT_USER` y `RABBITMQ_DEFAULT_PASS` de MQ; configurar también la cookie compartida del clúster.
+Completar `ORACLE_*` y `AZURE_*` según la tabla de variables. Crear `./wallet` y extraer dentro el ZIP del
+wallet descargado desde Oracle Autonomous, o indicar su ubicación mediante `WALLET_HOST_PATH`.
+Mantener `EMAIL_MODE=logging` para comprobar el flujo sin enviar correos reales.
+
+```bash
+docker compose -f ../mq/compose.yml --env-file ../mq/.env up -d --wait --wait-timeout 180
 docker compose --env-file .env config --quiet
+docker compose --env-file .env up -d --build --wait --wait-timeout 180 notify
+```
+
+Con Notify saludable, ejecutar la comprobación manual de topología descrita más abajo y revisar sus criterios
+de éxito antes de continuar con Requests y los demás servicios:
+
+```bash
 docker compose --env-file .env up -d --build
 docker compose ps
 curl -i http://localhost:8080/actuator/health
@@ -22,6 +41,25 @@ curl -i http://localhost:8081/actuator/health
 Usar `compose.ec2.yml` cuando BFF, requests, catalog, wallet y `.env` viven juntos. Catalog se construye antes y el BFF espera su health: si se recrea el BFF con catalog caído, el alta responde 503.
 
 Los archivos son independientes: no combinar ambos con `-f`. Añadir también el repo de Notify al layout plano. Configurar `RABBIT_ADDRESSES` con el DNS o IP privada de EC2-MQ y AMQP accesible desde EC2-Apps. No sirven `localhost` ni los nombres Docker de otro host. La configuración remota actual ofrece solo el endpoint del nodo 1, sin failover al nodo 2. No se añade una red bridge entre EC2 distintas.
+
+Para preparar ese layout desde un clon limpio, situarse en el directorio que contiene los repositorios
+hermanos, incluido `barriodigital-infra`. Copiar los archivos versionados para la primera configuración:
+
+```bash
+cp barriodigital-infra/apps/compose.ec2.yml compose.ec2.yml
+cp barriodigital-infra/apps/.env.example .env
+```
+
+Completar `.env` con los valores de ese entorno y extraer el wallet en `./wallet` antes de iniciar servicios.
+Si esos archivos ya existen, conservar su configuración al actualizar.
+
+```bash
+docker compose -f compose.ec2.yml --env-file .env config --quiet
+docker compose -f compose.ec2.yml --env-file .env up -d --build --wait --wait-timeout 180 notify
+```
+
+MQ debe haberse iniciado en EC2-MQ con su Compose y configuración privada, según `../mq/README.md`. El operador
+ejecuta allí las consultas de topología de la sección siguiente. Tras revisarlas, continuar en EC2-Apps:
 
 ```bash
 docker compose -f compose.ec2.yml --env-file .env up -d --build
@@ -40,6 +78,8 @@ Plantilla en `.env.example`; los valores de Entra ID están en `../docs/decision
 | `CORS_ALLOWED_ORIGINS` | Orígenes del front separados por coma; por defecto `http://localhost:4200` |
 | `WALLET_HOST_PATH` | Solo `compose.yml`: ruta del wallet en el host; por defecto `./wallet` |
 | `CATALOG_BASE_URL` | `http://catalog:8082`. El compose se la pasa al BFF. Catalog usa las mismas `ORACLE_*` y el mismo wallet |
+| `RABBIT_ADDRESSES`, `RABBIT_USER`, `RABBIT_PASSWORD` | Se pasan explícitamente a Requests y Notify. Local: nodos de la red MQ; EC2: endpoint privado del nodo 1 |
+| `RABBIT_NETWORK_NAME` | Solo local: red externa MQ compartida por Requests y Notify |
 
 ## Puertos
 
@@ -52,53 +92,55 @@ Plantilla en `.env.example`; los valores de Entra ID están en `../docs/decision
 
 Los dos Compose construyen Notify con su Dockerfile. Pasan explícitamente `RABBIT_ADDRESSES`, `RABBIT_USER`, `RABBIT_PASSWORD`, `EMAIL_MODE`, `EMAIL_FROM` y las variables `SMTP_*` de la plantilla. `--env-file` permite interpolar: no inyecta automáticamente todo el archivo. Logging es el modo de correo predeterminado y no envía mensajes reales. SMTP se activa con `EMAIL_MODE=smtp` y su configuración completa.
 
-En local Notify usa las redes de Apps y `${RABBIT_NETWORK_NAME:-barriodigital-mq_default}`; RabbitMQ se resuelve como `rabbitmq-1:5672,rabbitmq-2:5672`. Si se cambia el proyecto MQ con `-p`, ajustar `RABBIT_NETWORK_NAME`. No se publican puertos adicionales del broker para esta conexión. Detener Notify antes de bajar MQ para liberar su red.
+En local Notify y Requests usan las redes de Apps y `${RABBIT_NETWORK_NAME:-barriodigital-mq_default}`; RabbitMQ se resuelve como `rabbitmq-1:5672,rabbitmq-2:5672`. Si se cambia el proyecto MQ con `-p`, ajustar `RABBIT_NETWORK_NAME`.
 
 En ambos entornos `CERTIFICATE_OUTPUT_DIR=/app/data/certificates` coincide con el montaje de lectura/escritura `certificates:/app/data/certificates`. El volumen nombrado pertenece al proyecto Apps; con su nombre actual es `barriodigital-apps_certificates`. Recrear Notify o un `down` normal conserva los PDF. **`down -v` elimina ese volumen y sus certificados.** No utilizarlo para actualizar Notify. Los datos son locales al host, no compartidos entre EC2 ni entre motores Docker.
 
 La imagen mantiene el usuario de su base, root por defecto, y prepara el directorio. No necesita permisos 777. Comprobar el UID y la escritura sobre el montaje real después de construir. El generador escribe un temporal en ese mismo directorio y publica mediante movimiento atómico; un proveedor sin esa capacidad produce error recuperable, sin escritura directa sobre el PDF final.
 
-El health utiliza `curl` incluido en la imagen, con intervalos de 20 s, timeout 5 s y 60 s de inicio. `UP` acredita conectividad Rabbit, no la topología completa, SMTP ni la escritura del volumen. Comprobar exchanges, colas y bindings por separado.
+## Comprobación manual de topología de email
 
-No se incorpora `depends_on` de Requests hacia Notify: el publicador no existe aún. Su integración completará el orden de arranque y la garantía de topología. EP2-18 adelanta de EP2-28 el servicio Notify, sus variables, redes, healthcheck y volumen en los dos Compose; reutilizarlos al integrar el resto.
+Después de iniciar MQ y Notify, comprobar el health desde Apps. En local, desde esta carpeta:
 
-## Validación local de EP2-18
-
-Primero inspeccionar contenedores, redes, volúmenes y puertos. Usar un broker sin tráfico ajeno y entorno sintético no versionado. Si los nombres fijos de los contenedores ya están ocupados, no detenerlos ni reutilizar sus colas. No iniciar BFF, Requests o Catalog para esta validación.
-
-Desde `barriodigital-infra`, con archivos de entorno exclusivos en `.local/ep2-18`:
-
-```powershell
-docker compose -f apps/compose.yml --env-file .local/ep2-18/apps.env config --quiet
-docker compose -f apps/compose.ec2.yml --env-file .local/ep2-18/ec2.env config --quiet
-docker compose -f mq/compose.yml --env-file .local/ep2-18/mq.env config --quiet
-docker compose -f mq/compose.yml --env-file .local/ep2-18/mq.env up -d
-docker compose -f apps/compose.yml --env-file .local/ep2-18/apps.env up -d --build notify
-docker compose -f apps/compose.yml --env-file .local/ep2-18/apps.env exec notify id -u
-docker compose -f apps/compose.yml --env-file .local/ep2-18/apps.env exec notify curl -fsS http://localhost:8083/actuator/health
-docker exec rabbitmq-1 rabbitmqctl list_exchanges name type durable
-docker exec rabbitmq-1 rabbitmqctl list_queues name durable arguments consumers
-docker exec rabbitmq-1 rabbitmqctl list_bindings source_name destination_name routing_key
+```bash
+docker compose --env-file .env exec notify curl -fsS --max-time 4 http://localhost:8083/actuator/health
 ```
 
-La revisión estática EC2 debe usar un endpoint ficticio claramente identificado para interpolar y no desplegar. Revisar solo build, puertos, redes, montaje, healthcheck y nombres de variables del modelo efectivo; no imprimir `environment` completo con secretos resueltos.
+En el layout plano de EC2-Apps, usar el archivo independiente:
 
-Publicar ambos eventos por Management solo en el broker aislado, con `eventId` nuevos, `cmd.topic`, routing key igual a `type`, JSON UTF-8 y entrega persistente. Los campos mínimos son `requestId` y `procedureType`. Verificar dos archivos, sus logs `certificate-pdf`, un duplicado sin regeneración y un payload inválido en la DLQ. No confundir `routed: true` con generación terminada.
-
-```powershell
-docker compose -f apps/compose.yml --env-file .local/ep2-18/apps.env exec notify sh -c 'sha256sum /app/data/certificates/*.pdf'
-docker compose -f apps/compose.yml --env-file .local/ep2-18/apps.env up -d --no-deps --force-recreate notify
-docker compose -f apps/compose.yml --env-file .local/ep2-18/apps.env exec notify sh -c 'sha256sum /app/data/certificates/*.pdf'
+```bash
+docker compose -f compose.ec2.yml --env-file .env exec notify curl -fsS --max-time 4 http://localhost:8083/actuator/health
 ```
 
-Comparar nombres y hashes **antes de reenviar eventos**. Después reenviar uno para comprobar reemplazo atómico sobre el montaje real: misma ruta, PDF completo y nueva generación. Verificar que no queden `.part`. Los tests deterministas cubren fallos y preservación del archivo previo; una prueba de permisos por sí sola no basta cuando el proceso es root.
+Se espera HTTP correcto y `status: UP`. En el host Docker de MQ (local o, por el operador, en EC2-MQ),
+consultar sin publicar ni consumir mensajes:
 
-### Resultados del 17/10/2026
+```bash
+docker exec rabbitmq-1 rabbitmqctl --quiet --timeout 10 list_exchanges --vhost / name type durable auto_delete
+docker exec rabbitmq-1 rabbitmqctl --quiet --timeout 10 list_queues --vhost / name durable auto_delete arguments consumers
+docker exec rabbitmq-1 rabbitmqctl --quiet --timeout 10 list_bindings --vhost / source_name destination_name destination_kind routing_key arguments
+```
 
-Se validaron sintácticamente los tres Compose mediante `config --quiet`, con entornos ficticios no versionados. El modelo EC2 se revisó sin imprimir secretos; `--project-directory ..` permitió comprobar sus contextos contra un layout plano equivalente en el workspace. Esa revisión no acredita conexión o despliegue EC2.
+Los comandos deben terminar correctamente. Revisar los siguientes valores antes de continuar con el
+`docker compose up -d --build` de Apps:
 
-Se construyó Notify y se iniciaron únicamente MQ y Notify, sin recursos BarrioDigital previos ni tráfico ajeno. Se comprobaron tres exchanges, seis colas y nueve bindings, un consumidor por cola principal y ninguno en DLQ. Dos eventos nuevos produjeron PDF y logs posteriores al guardado; el duplicado no regeneró y un payload inválido quedó en la DLQ de certificados.
+| Recurso | Criterio de éxito |
+|---|---|
+| `cmd.topic` | Tipo `topic`, durable `true`, auto-delete `false` |
+| `cmd.dead.dlx` | Tipo `direct`, durable `true`, auto-delete `false` |
+| `q.cmd.email` | Durable `true`, auto-delete `false`, `x-dead-letter-exchange=cmd.dead.dlx` y `x-dead-letter-routing-key=email.dead` |
+| `q.cmd.email.dlq` | Durable `true`, auto-delete `false`, argumentos vacíos y ningún consumidor |
+| Binding principal | Origen `cmd.topic`, destino de tipo `queue` `q.cmd.email`, routing key `email.*`, argumentos vacíos; cubre `email.admitted` y `email.resolved` |
+| Binding DLQ | Origen `cmd.dead.dlx`, destino de tipo `queue` `q.cmd.email.dlq`, routing key `email.dead`, argumentos vacíos |
 
-El montaje resultó `barriodigital-apps_certificates`, lectura/escritura, UID 0, con redes Apps y MQ y sin puerto publicado de Notify. Tras recrear únicamente Notify, ambos hashes permanecieron idénticos **antes de reenviar**. Al reenviar el ingreso cambió solo ese PDF en su misma ruta; no quedaron temporales. También se comprobó conservación al actualizar a la imagen final. Los contenedores de validación se detuvieron al terminar y sus volúmenes se conservaron; los volúmenes MQ nuevos contienen configuración y datos sintéticos de esta validación.
+Las colas siguen el contrato de colas clásicas. Con una instancia de Notify se espera un consumidor en
+`q.cmd.email`; su presencia no sustituye la revisión de recursos y enlaces. Estas consultas utilizan los
+permisos operativos existentes en el host MQ y la cookie del contenedor; no añaden permisos administrativos
+al usuario AMQP de Requests. Management permanece en loopback.
 
-Evidencias locales ignoradas: `.local/ep2-18/topology.json`, `summary.json`, `ec2-model-redacted.json`, logs, copias PDF y `hashes-before.txt`, `hashes-after.txt`, `hashes-reprocessed.txt`. Se usaron los Compose existentes, sin override de arquitectura ni archivos alternativos. No se ejecutó `down -v`, no se modificó AWS y no se enviaron correos reales.
+El health acredita conexión, no toda la topología; `depends_on: service_healthy` tampoco comprueba bindings.
+Esta revisión es manual: corregir cualquier recurso o enlace faltante antes de continuar. Requests conserva
+`restart: unless-stopped` en EC2, pero los reinicios automáticos de Docker no repiten la revisión ni garantizan
+el orden entre servicios.
+
+Las pruebas y el resumen de integración se documentan en el repo `ms-barriodigital-requests` → `README.md`.

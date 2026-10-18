@@ -6,7 +6,9 @@ AMQP (`5672`) se publica en `RABBIT_AMQP_BIND_ADDRESS` y Management (`15672`) en
 
 En la EC2 esos valores cambian y el security group es el que cierra el acceso. Los pasos para recrearla están más abajo: la IP pública del Learner Lab no se conserva. Notify remoto usa solo el AMQP del nodo 1; no hay un segundo endpoint.
 
-En local Apps conecta Notify a la red `barriodigital-mq_default`, creada por este proyecto. MQ debe iniciar primero. No hace falta exponer AMQP fuera de loopback para comunicar contenedores de la misma red. Detener Notify antes de bajar MQ para liberar la red compartida.
+En local Apps conecta Notify y Requests a la red `barriodigital-mq_default`, creada por este proyecto. MQ debe iniciar primero. No hace falta exponer AMQP fuera de loopback para comunicar contenedores de la misma red. Detener ambos antes de bajar MQ para liberar la red compartida.
+
+El arranque de Apps y la comprobación manual de topología se documentan en `../apps/README.md`.
 
 ## Levantar
 
@@ -15,8 +17,8 @@ Desde la raíz de `barriodigital-infra`:
 ```powershell
 copy mq\.env.example mq\.env
 # editar mq\.env: usuario, password y cookie. La cookie tiene que ser la misma para los dos nodos (el compose ya la reutiliza).
-docker compose -f mq/compose.yml up -d
-docker compose -f mq/compose.yml ps
+docker compose -f mq/compose.yml --env-file mq/.env up -d
+docker compose -f mq/compose.yml --env-file mq/.env ps
 ```
 
 El `.env` no se sube a git. Sin él, Compose se detiene y pide las tres variables.
@@ -35,7 +37,7 @@ Management: [http://127.0.0.1:15672](http://127.0.0.1:15672) con el usuario y la
 ## Bajar
 
 ```powershell
-docker compose -f mq/compose.yml down
+docker compose -f mq/compose.yml --env-file mq/.env down
 ```
 
 `down` para los contenedores y deja los volúmenes. Las colas durables siguen ahí al volver a levantar. `down -v` borra los volúmenes y el clúster parte de cero.
