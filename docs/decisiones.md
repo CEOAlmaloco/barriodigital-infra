@@ -8,7 +8,7 @@
 - Application ID URI: `api://a0773f3e-abc6-4b53-86fc-9d33a2eddef3` (el `aud` real de los tokens es otro, ver "Contrato JWT")
 - Redirect URIs (SPA):
   - http://localhost:4200 (desarrollo)
-  - https://main.d2akoucfdwgozq.amplifyapp.com (producción, Amplify)
+  - https://main.db7dk8tawyzry.amplifyapp.com (Amplify de este lab)
 
 ## Roles y usuarios de prueba
 
@@ -38,13 +38,33 @@
 - El orden de despliegue es catalog primero y el BFF después. El compose espera
   a que el health de catalog esté UP antes de arrancar el BFF. Si se recrea el
   BFF mientras catalog no responde, el alta de trámites responde 503.
-- API Gateway (HTTP API `barriodigital-api`), Invoke URL: https://dfcq1q4noj.execute-api.us-east-1.amazonaws.com
-  - Reenvía al BFF en el puerto 8080 de la EC2.
-  - JWT Authorizer: issuer https://login.microsoftonline.com/ce6e98c4-63f0-4b79-83e5-20925b5fada2/v2.0,
-    audience a0773f3e-abc6-4b53-86fc-9d33a2eddef3 (sin prefijo api://, ver nota
-    en "Contrato JWT" más abajo).
-  - Rutas protegidas: GET /api/ping, GET/POST /api/requests, GET /api/requests/{id}.
-- Frontend desplegado en AWS Amplify Hosting: https://main.d2akoucfdwgozq.amplifyapp.com
+- API Gateway (HTTP API `barriodigital-http`), Invoke URL: https://0yo277ntr8.execute-api.us-east-1.amazonaws.com
+  - Reenvía al BFF en `http://3.91.235.106:8080`. En catalog y en mq la integración
+    conserva el prefijo (`/api/catalog/{proxy}`, `/api/mq/{proxy}`): en esas rutas
+    `{proxy}` es solo el resto del path.
+  - JWT Authorizer `entra-jwt`: issuer https://login.microsoftonline.com/ce6e98c4-63f0-4b79-83e5-20925b5fada2/v2.0.
+    Audiences: `a0773f3e-abc6-4b53-86fc-9d33a2eddef3` y `api://a0773f3e-abc6-4b53-86fc-9d33a2eddef3`.
+  - JWT en las rutas de negocio. Sin token el Gateway responde 401. No mira el rol:
+    Funcionario con token válido en `/api/mq/queues` recibe 403 del BFF
+    (`No tienes el rol necesario para este recurso`). El BFF de la EC2
+    `barriodigital-apps` es el que tiene esa regla. Catalog y las transiciones
+    llegan al BFF; catalog no está en el compose de esa instancia y requests
+    todavía no expone el contrato nuevo, así que esas dos responden 500.
+  - `GET /api/ping`, `GET /api/requests`, `POST /api/requests` y `GET /api/requests/{id}`
+    siguen entrando por `GET|POST|PUT|PATCH|DELETE /{proxy+}`.
+  - Rutas explícitas de EP2-30, mismo authorizer `entra-jwt`:
+    - `GET`, `POST` y `PUT /api/catalog/{proxy+}`.
+    - `GET /api/requests/meta/transitions` (literal, para que `{id}` no capture `meta`).
+    - `PUT /api/requests/{id}/status`.
+    - `GET`, `POST`, `PUT` y `DELETE /api/mq/{proxy+}`.
+  - No quedó `ANY /{proxy+}`. Esa ruta también capturaba `OPTIONS` y el preflight
+    respondía 401. HTTP API no tiene `**`; `{proxy+}` cubre el resto del path.
+  - CORS del Gateway, sin `*`. Orígenes: `http://localhost:4200`,
+    `https://main.db7dk8tawyzry.amplifyapp.com` y el sitio S3 del front de este lab.
+    Métodos `GET`, `POST`, `PUT`, `PATCH`, `DELETE` y `OPTIONS`. Headers
+    `authorization`, `content-type`, `x-user-id` y `x-user-roles`. El preflight lo
+    responde el Gateway, sin JWT.
+- Frontend desplegado en AWS Amplify Hosting: https://main.db7dk8tawyzry.amplifyapp.com
   - Deploy manual, sin repositorio Git conectado, con una regla de rewrite
     (`404-200` a `/index.html`) para las rutas de Angular.
   - Se descartó CloudFront + S3 porque cloudfront:CreateDistribution no está

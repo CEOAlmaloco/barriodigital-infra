@@ -20,7 +20,7 @@ flowchart LR
   end
 
   subgraph AWS["AWS"]
-    GW[API Gateway HTTP API<br/>barriodigital-api<br/>JWT Authorizer]
+    GW[API Gateway HTTP API<br/>barriodigital-http<br/>JWT Authorizer]
     subgraph Back["EC2 — mundo apps, Docker Compose"]
       BFF[ms-barriodigital-bff<br/>:8080]
       REQ[ms-barriodigital-requests<br/>:8081]
@@ -100,7 +100,7 @@ Contrato resumido (detalle en `decisiones.md`):
 | Pieza | Dónde |
 |-------|--------|
 | Front | AWS Amplify Hosting (producción); `ng serve` → `http://localhost:4200` (desarrollo) |
-| API Gateway | HTTP API `barriodigital-api` con JWT Authorizer, delante del BFF |
+| API Gateway | HTTP API `barriodigital-http` con JWT Authorizer, delante del BFF |
 | BFF + requests | Docker Compose en EC2 (`apps/compose.ec2.yml`) o local (`apps/compose.yml`) |
 | Oracle | Autonomous en OCI (no en AWS) |
 | Wallet | Volumen `/wallet`, no en Git |
