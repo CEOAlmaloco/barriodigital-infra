@@ -32,12 +32,13 @@
 ## Despliegue en AWS
 
 - catalog, notify, requests y el BFF corren en la EC2 `barriodigital-apps`
-  (`i-0e0571365e11188c4`, IP pública `3.91.235.106`, privada `172.31.45.131`).
+  (`i-0e0571365e11188c4`, IP pública `54.175.48.178`, privada `172.31.45.131`).
   Los cuatro contenedores están Up y healthy: `bd-catalog`, `bd-notify`,
-  `bd-requests` y `bd-bff`. El orden real de este despliegue fue catalog
-  (21:23:33Z), notify (21:24:14Z), requests (21:24:39Z) y el BFF al final
-  (21:25:22Z). Si se recrea la instancia cambia su IP pública, y hay que
-  actualizar la integración del API Gateway hacia el BFF.
+  `bd-requests` y `bd-bff`. Al encender el lab la IP pública cambió y el
+  Gateway quedó apuntando a la anterior; se actualizó a esta. El BFF se
+  recreó a las 23:29Z, con catalog ya healthy. Si se recrea la instancia
+  cambia su IP pública, y hay que actualizar la integración del API Gateway
+  hacia el BFF.
 - catalog no publica puerto: `expose: "8082"`, sin `ports`. El BFF lo llama con
   `CATALOG_BASE_URL=http://catalog:8082`. `reserve` y `release` no validan JWT
   y solo son alcanzables dentro de la red del compose.
@@ -45,7 +46,7 @@
   a que el health de catalog esté UP antes de arrancar el BFF. Si se recrea el
   BFF mientras catalog no responde, el alta de trámites responde 503.
 - API Gateway (HTTP API `barriodigital-http`), Invoke URL: https://0yo277ntr8.execute-api.us-east-1.amazonaws.com
-  - Reenvía al BFF en `http://3.91.235.106:8080`. En catalog y en mq la integración
+  - Reenvía al BFF en `http://54.175.48.178:8080`. En catalog y en mq la integración
     conserva el prefijo (`/api/catalog/{proxy}`, `/api/mq/{proxy}`): en esas rutas
     `{proxy}` es solo el resto del path.
   - JWT Authorizer `entra-jwt`: issuer https://login.microsoftonline.com/ce6e98c4-63f0-4b79-83e5-20925b5fada2/v2.0.
@@ -70,15 +71,15 @@
     responde el Gateway, sin JWT.
 - Frontend desplegado en AWS Amplify Hosting: https://main.db7dk8tawyzry.amplifyapp.com
   - App `barriodigital-front` (`db7dk8tawyzry`), rama `main`, job manual 3.
-    El build publicado llama a este Gateway. La pantalla de login carga.
-    La sesión no cierra: Entra rechaza el redirect con AADSTS50011.
+    El build publicado llama a este Gateway. Entra ya acepta el redirect de
+    Amplify: con la cuenta vecino la sesión abre `/inicio` ("Hola, Vecino Test").
   - Deploy manual, sin repositorio Git conectado, con una regla de rewrite
     (`404-200` a `/index.html`) para las rutas de Angular.
   - Se descartó CloudFront + S3 porque cloudfront:CreateDistribution no está
     permitido en el rol del Learner Lab.
 - Oracle Autonomous Database vive en OCI, no en AWS. El wallet se monta en los
   contenedores de requests y de catalog como volumen (`/wallet`) y nunca va a Git.
-- ec2-mq es `i-0e487974a1f920449` (pública `50.17.64.22`, privada
+- ec2-mq es `i-0e487974a1f920449` (pública `54.81.56.155`, privada
   `172.31.46.156`). Corren `rabbitmq-1` y `rabbitmq-2`, los dos healthy, en el
   clúster `rabbit@rabbitmq-1` / `rabbit@rabbitmq-2`. AMQP `5672` está publicado
   solo en `172.31.46.156` y el security group lo admite desde el security group
