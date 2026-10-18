@@ -98,7 +98,7 @@ En ambos entornos `CERTIFICATE_OUTPUT_DIR=/app/data/certificates` coincide con e
 
 La imagen mantiene el usuario de su base, root por defecto, y prepara el directorio. No necesita permisos 777. Comprobar el UID y la escritura sobre el montaje real después de construir. El generador escribe un temporal en ese mismo directorio y publica mediante movimiento atómico; un proveedor sin esa capacidad produce error recuperable, sin escritura directa sobre el PDF final.
 
-## Comprobación manual de topología de email
+## Comprobación manual de topología de email y cuadrillas
 
 Después de iniciar MQ y Notify, comprobar el health desde Apps. En local, desde esta carpeta:
 
@@ -127,14 +127,20 @@ Los comandos deben terminar correctamente. Revisar los siguientes valores antes 
 | Recurso | Criterio de éxito |
 |---|---|
 | `cmd.topic` | Tipo `topic`, durable `true`, auto-delete `false` |
+| `cmd.direct` | Tipo `direct`, durable `true`, auto-delete `false` |
 | `cmd.dead.dlx` | Tipo `direct`, durable `true`, auto-delete `false` |
 | `q.cmd.email` | Durable `true`, auto-delete `false`, `x-dead-letter-exchange=cmd.dead.dlx` y `x-dead-letter-routing-key=email.dead` |
 | `q.cmd.email.dlq` | Durable `true`, auto-delete `false`, argumentos vacíos y ningún consumidor |
-| Binding principal | Origen `cmd.topic`, destino de tipo `queue` `q.cmd.email`, routing key `email.*`, argumentos vacíos; cubre `email.admitted` y `email.resolved` |
-| Binding DLQ | Origen `cmd.dead.dlx`, destino de tipo `queue` `q.cmd.email.dlq`, routing key `email.dead`, argumentos vacíos |
+| Binding principal de email | Origen `cmd.topic`, destino de tipo `queue` `q.cmd.email`, routing key `email.*`, argumentos vacíos; cubre `email.admitted`, `email.visit` y `email.resolved` |
+| Binding DLQ de email | Origen `cmd.dead.dlx`, destino de tipo `queue` `q.cmd.email.dlq`, routing key `email.dead`, argumentos vacíos |
+| `q.cmd.crew` | Durable `true`, auto-delete `false`, `x-dead-letter-exchange=cmd.dead.dlx` y `x-dead-letter-routing-key=crew.dead` |
+| `q.cmd.crew.dlq` | Durable `true`, auto-delete `false`, argumentos vacíos y ningún consumidor |
+| Binding principal de cuadrillas | Origen `cmd.direct`, destino de tipo `queue` `q.cmd.crew`, routing key `crew.ticket`, argumentos vacíos |
+| Binding DLQ de cuadrillas | Origen `cmd.dead.dlx`, destino de tipo `queue` `q.cmd.crew.dlq`, routing key `crew.dead`, argumentos vacíos |
 
 Las colas siguen el contrato de colas clásicas. Con una instancia de Notify se espera un consumidor en
-`q.cmd.email`; su presencia no sustituye la revisión de recursos y enlaces. Estas consultas utilizan los
+cada una de `q.cmd.email` y `q.cmd.crew`, y ninguno en sus DLQ; su presencia no sustituye la revisión de
+recursos y enlaces. Estas consultas utilizan los
 permisos operativos existentes en el host MQ y la cookie del contenedor; no añaden permisos administrativos
 al usuario AMQP de Requests. Management permanece en loopback.
 
