@@ -3,8 +3,10 @@
 #   copy .env.example .env
 #   docker compose -f mq/compose.yml up -d
 #
-# AMQP usa RABBIT_AMQP_BIND_ADDRESS (loopback por defecto). Management queda en loopback.
-# El nodo 2 no publica puertos: se habla con el 1 por la red del compose.
+# AMQP usa RABBIT_AMQP_BIND_ADDRESS (loopback por defecto).
+# Management usa RABBIT_MGMT_BIND_ADDRESS (loopback por defecto).
+# En EC2-MQ, AMQP va a la IP privada y Management a 0.0.0.0; el security group
+# cierra ambos. El nodo 2 no publica puertos: se habla con el 1 por la red del compose.
 # Credenciales y cookie: mq/.env (plantilla en .env.example). Nunca en git.
 
 name: barriodigital-mq
@@ -16,7 +18,7 @@ services:
     hostname: rabbitmq-1
     ports:
       - "${RABBIT_AMQP_BIND_ADDRESS:-127.0.0.1}:5672:5672"
-      - "127.0.0.1:15672:15672"
+      - "${RABBIT_MGMT_BIND_ADDRESS:-127.0.0.1}:15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?Definir mq/.env a partir de mq/.env.example}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?Definir mq/.env a partir de mq/.env.example}
