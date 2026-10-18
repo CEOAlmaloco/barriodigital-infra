@@ -1,12 +1,13 @@
 {
   "info": {
     "name": "BarrioDigital",
-    "description": "Importar en Postman (Import > Raw text o el archivo). Correr la colección en orden con Collection Runner.\n\nAntes: requests en http://localhost:8081, catalog en http://localhost:8082 (Maven; el compose no publica el 8082) y el BFF en http://localhost:8080.\n\nSin accessToken, la carpeta del BFF autenticado no exige 200. Para esos casos, pegar un access token de Entra en la variable accessToken de la colección.\n\nmq-admin y notify no están en esta colección: no hay servicio levantable.",
+    "description": "Importar en Postman (Import > Raw text o el archivo). Correr la colección en orden con Collection Runner.\n\nLas carpetas del BFF usan el API Gateway de este lab (bffUrl). Health del BFF y la carpeta requests pegan a la EC2 de apps (appsUrl y requestsUrl). catalog no publica puerto: catalogUrl sigue en localhost:8082 y esa carpeta solo corre contra un catalog local.\n\nSin accessToken, la carpeta del BFF autenticado no exige 200. Para esos casos, pegar un access token de Entra en la variable accessToken de la colección.\n\nmq-admin no está en la EC2. notify no tiene API HTTP de negocio en esta colección.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "bffUrl", "value": "http://localhost:8080" },
-    { "key": "requestsUrl", "value": "http://localhost:8081" },
+    { "key": "bffUrl", "value": "https://0yo277ntr8.execute-api.us-east-1.amazonaws.com" },
+    { "key": "appsUrl", "value": "http://54.175.48.178:8080" },
+    { "key": "requestsUrl", "value": "http://54.175.48.178:8081" },
     { "key": "catalogUrl", "value": "http://localhost:8082" },
     { "key": "vecinoId", "value": "postman-vecino" },
     { "key": "funcionarioId", "value": "postman-func" },
@@ -24,7 +25,7 @@
             "pm.test('200', function () { pm.response.to.have.status(200); });",
             "pm.test('UP', function () { pm.expect(pm.response.json().status).to.eql('UP'); });"
           ] } }],
-          "request": { "method": "GET", "url": "{{bffUrl}}/actuator/health" }
+          "request": { "method": "GET", "url": "{{appsUrl}}/actuator/health" }
         },
         {
           "name": "requests health",
