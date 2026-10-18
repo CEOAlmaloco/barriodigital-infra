@@ -499,13 +499,19 @@ La alternativa era declarar solo el binding por el que publica la aplicación (t
 
 ### 5. Orden de arranque
 
-`requests` es quien publica y declara `cmd.topic`, `cmd.direct` y `cmd.dead.dlx`. `notify` declara colas, DLQ y bindings. Un binding no se puede crear si el exchange no existe, y `requests` no puede esperar a `notify` si `notify` a su vez espera esos exchanges: el healthcheck no llegaría nunca.
+`requests` declara `cmd.topic`, `cmd.direct` y `cmd.dead.dlx`. `notify` también declara esos exchanges,
+además de las colas, DLQ y bindings, para poder iniciar sin depender de Requests. Así se evita una dependencia
+circular. Las declaraciones repetidas deben tener atributos compatibles: mismo tipo, durabilidad,
+auto-delete y argumentos; de lo contrario RabbitMQ rechaza la declaración.
 
-`notify` también declara los tres exchanges, de forma idempotente, y después las colas y los bindings. Así puede quedar healthy sin que `requests` haya arrancado. `requests` los vuelve a declarar al partir. Declarar dos veces el mismo exchange durable no cambia nada.
+Se inicia MQ y después Notify antes de Requests. El health de Notify acredita conexión al broker, no toda
+la topología. El procedimiento de arranque, los comandos y los criterios de comprobación manual se documentan
+en `apps/README.md`. Esa comprobación no se repite automáticamente durante los reinicios de Docker ni garantiza
+el orden de recuperación entre servicios.
 
-El contrato del futuro publicador requiere que `requests` espere a `notify` y a su topología declarada. Esa dependencia aún no se incorpora: Requests no implementa la publicación. El health actual de Notify comprueba conexión al broker, no la existencia completa de exchanges, colas y bindings. La declaración automática y su comprobación explícita son pasos distintos; `UP` por sí solo no satisface toda esta garantía. La integración del publicador completará el orden y la verificación necesaria.
-
-Eso no alcanza solo. Si un mensaje sale cuando el exchange todavía no tiene bindings, RabbitMQ lo descarta sin error. La publicación usa `mandatory=true`. El callback de retorno registra en el log el mensaje devuelto: exchange, routing key y `eventId`. No se traga en silencio.
+Si un exchange existente no puede enrutar un mensaje a ninguna cola, `mandatory=true` hace que RabbitMQ lo
+devuelva al publicador. El callback registra exchange, routing key y `eventId` para diagnosticar el problema.
+El retorno no significa procesamiento exitoso ni recupera o reenvía automáticamente el evento.
 
 ## Contrato: ACK, reintentos y DLQ (EP2-03)
 

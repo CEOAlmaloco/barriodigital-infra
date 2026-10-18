@@ -48,8 +48,14 @@ services:
       ORACLE_USER: ${ORACLE_USER}
       ORACLE_PASSWORD: ${ORACLE_PASSWORD}
       ORACLE_WALLET_DIR: /wallet
+      RABBIT_ADDRESSES: ${RABBIT_ADDRESSES:?Definir endpoint privado de EC2-MQ}
+      RABBIT_USER: ${RABBIT_USER:-barriodigital}
+      RABBIT_PASSWORD: ${RABBIT_PASSWORD:?Definir RABBIT_PASSWORD}
     volumes:
       - ./wallet:/wallet:ro
+    depends_on:
+      notify:
+        condition: service_healthy
     restart: unless-stopped
 
   catalog:
