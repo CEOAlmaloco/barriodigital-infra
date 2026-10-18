@@ -7,8 +7,11 @@
 - Authority: https://login.microsoftonline.com/ce6e98c4-63f0-4b79-83e5-20925b5fada2/
 - Application ID URI: `api://a0773f3e-abc6-4b53-86fc-9d33a2eddef3` (el `aud` real de los tokens es otro, ver "Contrato JWT")
 - Redirect URIs (SPA):
-  - http://localhost:4200 (desarrollo)
-  - https://main.db7dk8tawyzry.amplifyapp.com (Amplify de este lab)
+  - http://localhost:4200 (desarrollo). Con este redirect el login sí entrega token.
+  - https://main.db7dk8tawyzry.amplifyapp.com es el redirect que manda el frontend
+    de este lab. Entra todavía no lo tiene en la app registration: el login
+    responde AADSTS50011. Hay que agregarlo en el portal, junto al de localhost,
+    para que la sesión de Amplify cierre.
 
 ## Roles y usuarios de prueba
 
@@ -28,10 +31,13 @@
 
 ## Despliegue en AWS
 
-- BFF, ms-barriodigital-requests y ms-barriodigital-catalog corren vía Docker
-  Compose en una EC2 de AWS Academy Learner Lab (`apps/compose.ec2.yml`). Si se
-  recrea la instancia cambia su IP pública, y hay que actualizar la integración
-  del API Gateway hacia el BFF.
+- catalog, notify, requests y el BFF corren en la EC2 `barriodigital-apps`
+  (`i-0e0571365e11188c4`, IP pública `3.91.235.106`, privada `172.31.45.131`).
+  Los cuatro contenedores están Up y healthy: `bd-catalog`, `bd-notify`,
+  `bd-requests` y `bd-bff`. El orden real de este despliegue fue catalog
+  (21:23:33Z), notify (21:24:14Z), requests (21:24:39Z) y el BFF al final
+  (21:25:22Z). Si se recrea la instancia cambia su IP pública, y hay que
+  actualizar la integración del API Gateway hacia el BFF.
 - catalog no publica puerto: `expose: "8082"`, sin `ports`. El BFF lo llama con
   `CATALOG_BASE_URL=http://catalog:8082`. `reserve` y `release` no validan JWT
   y solo son alcanzables dentro de la red del compose.
@@ -46,10 +52,8 @@
     Audiences: `a0773f3e-abc6-4b53-86fc-9d33a2eddef3` y `api://a0773f3e-abc6-4b53-86fc-9d33a2eddef3`.
   - JWT en las rutas de negocio. Sin token el Gateway responde 401. No mira el rol:
     Funcionario con token válido en `/api/mq/queues` recibe 403 del BFF
-    (`No tienes el rol necesario para este recurso`). El BFF de la EC2
-    `barriodigital-apps` es el que tiene esa regla. Catalog y las transiciones
-    llegan al BFF; catalog no está en el compose de esa instancia y requests
-    todavía no expone el contrato nuevo, así que esas dos responden 500.
+    (`No tienes el rol necesario para este recurso`). Con catalog y requests
+    arriba, `POST /api/requests` por este Gateway respondió 201.
   - `GET /api/ping`, `GET /api/requests`, `POST /api/requests` y `GET /api/requests/{id}`
     siguen entrando por `GET|POST|PUT|PATCH|DELETE /{proxy+}`.
   - Rutas explícitas de EP2-30, mismo authorizer `entra-jwt`:
@@ -65,17 +69,24 @@
     `authorization`, `content-type`, `x-user-id` y `x-user-roles`. El preflight lo
     responde el Gateway, sin JWT.
 - Frontend desplegado en AWS Amplify Hosting: https://main.db7dk8tawyzry.amplifyapp.com
+  - App `barriodigital-front` (`db7dk8tawyzry`), rama `main`, job manual 3.
+    El build publicado llama a este Gateway. La pantalla de login carga.
+    La sesión no cierra: Entra rechaza el redirect con AADSTS50011.
   - Deploy manual, sin repositorio Git conectado, con una regla de rewrite
     (`404-200` a `/index.html`) para las rutas de Angular.
   - Se descartó CloudFront + S3 porque cloudfront:CreateDistribution no está
     permitido en el rol del Learner Lab.
 - Oracle Autonomous Database vive en OCI, no en AWS. El wallet se monta en los
   contenedores de requests y de catalog como volumen (`/wallet`) y nunca va a Git.
-- ec2-mq es otra instancia del Learner Lab y solo corre el clúster de
-  `mq/compose.yml`. AMQP `5672` se publica en la IP privada del host y el
-  security group lo admite solo desde el security group de ec2-apps. Management
-  `15672` se publica en `0.0.0.0` del host y el security group lo admite solo
-  desde la IP del equipo. Ninguno de los dos puertos se abre a `0.0.0.0/0`.
+- ec2-mq es `i-0e487974a1f920449` (pública `50.17.64.22`, privada
+  `172.31.46.156`). Corren `rabbitmq-1` y `rabbitmq-2`, los dos healthy, en el
+  clúster `rabbit@rabbitmq-1` / `rabbit@rabbitmq-2`. AMQP `5672` está publicado
+  solo en `172.31.46.156` y el security group lo admite desde el security group
+  de ec2-apps. Management `15672` está en `0.0.0.0` del host y el security group
+  lo admite solo desde `201.187.175.153/32`. Ninguno de los dos puertos se abre
+  a `0.0.0.0/0`. notify y requests usan `RABBIT_ADDRESSES=172.31.46.156:5672`:
+  hay dos conexiones del usuario `barriodigital` desde `172.31.45.131`, y
+  consumidores en `q.cmd.email`, `q.cmd.crew` y `q.cmd.certificate`.
   La IP pública cambia al recrear la instancia; cómo rehacerla está en
   `mq/README.md`. En local los dos puertos siguen en `127.0.0.1`.
 
