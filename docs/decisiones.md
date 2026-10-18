@@ -51,6 +51,13 @@
     permitido en el rol del Learner Lab.
 - Oracle Autonomous Database vive en OCI, no en AWS. El wallet se monta en los
   contenedores de requests y de catalog como volumen (`/wallet`) y nunca va a Git.
+- ec2-mq es otra instancia del Learner Lab y solo corre el clúster de
+  `mq/compose.yml`. AMQP `5672` se publica en la IP privada del host y el
+  security group lo admite solo desde el security group de ec2-apps. Management
+  `15672` se publica en `0.0.0.0` del host y el security group lo admite solo
+  desde la IP del equipo. Ninguno de los dos puertos se abre a `0.0.0.0/0`.
+  La IP pública cambia al recrear la instancia; cómo rehacerla está en
+  `mq/README.md`. En local los dos puertos siguen en `127.0.0.1`.
 
 ## Contrato JWT
 
@@ -601,7 +608,7 @@ La escritura usa un temporal exclusivo en el mismo directorio y publica el PDF c
 
 Tras guardar se registra un INFO `certificate-pdf` con JSON compacto que contiene tipo, eventId y nombre. Solo entonces termina el handler y EP2-15 marca y confirma. Regenerar puede cambiar la fecha. Esto no añade deduplicación persistente, exclusión entre instancias ni garantía de exactamente una ejecución. Atomicidad de publicación no equivale a durabilidad absoluta ante pérdida de energía; una caída abrupta puede dejar temporales y no se añade limpieza indiscriminada.
 
-Local conecta Notify a Apps y a la red externa MQ, con nombres de ambos nodos. MQ debe iniciar primero, sin `depends_on` entre proyectos. EC2 usa la red Apps y exige un endpoint privado del nodo 1 mediante `RABBIT_ADDRESSES`. `RABBIT_AMQP_BIND_ADDRESS` permite publicar AMQP de MQ en su IP privada, conservando loopback por defecto y Management siempre en loopback. La conectividad privada se configura aparte, sin cambios AWS como parte de EP2-18. Logging sigue siendo el correo predeterminado; SMTP se activa por entorno.
+Local conecta Notify a Apps y a la red externa MQ, con nombres de ambos nodos. MQ debe iniciar primero, sin `depends_on` entre proyectos. EC2 usa la red Apps y exige un endpoint privado del nodo 1 mediante `RABBIT_ADDRESSES`. `RABBIT_AMQP_BIND_ADDRESS` permite publicar AMQP de MQ en su IP privada, conservando loopback por defecto. En local Management sigue en loopback. En la EC2, EP2-29 lo publica con `RABBIT_MGMT_BIND_ADDRESS=0.0.0.0` y lo cierra el security group. Logging sigue siendo el correo predeterminado; SMTP se activa por entorno.
 
 Queda adelantado de EP2-28 el servicio Notify en los dos Compose existentes, sus variables, red local, healthcheck y volumen. No se crea un Compose de demostración ni se modifica Requests. Validación reproducible en `apps/README.md` y en el README de Notify; los resultados efectivos se registran separadamente de procedimientos pendientes.
 
