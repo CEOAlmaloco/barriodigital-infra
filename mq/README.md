@@ -2,7 +2,11 @@
 
 Clúster local de dos nodos `rabbitmq:3.12-management-alpine`. Comparten la cookie de Erlang, cada uno tiene su volumen y el nodo 2 entra al clúster del nodo 1 por `classic_config` (`rabbitmq.conf`).
 
-AMQP (`5672`) y Management (`15672`) quedan publicados solo en `127.0.0.1`, y solo desde el nodo 1. El nodo 2 no abre puertos en el host.
+AMQP (`5672`) se publica en `RABBIT_AMQP_BIND_ADDRESS`, con `127.0.0.1` por defecto. Management (`15672`) permanece en loopback. Solo el nodo 1 publica puertos; el nodo 2 no abre puertos en el host.
+
+Para EC2-MQ configurar la IP privada de su interfaz en `RABBIT_AMQP_BIND_ADDRESS` y permitir conectividad privada desde EC2-Apps al 5672 mediante la configuración de red correspondiente. Este cambio no configura AWS ni abre Management. Notify remoto usa ese endpoint del nodo 1; no se promete un segundo endpoint.
+
+En local Apps conecta Notify a la red `barriodigital-mq_default`, creada por este proyecto. MQ debe iniciar primero. No hace falta exponer AMQP fuera de loopback para comunicar contenedores de la misma red. Detener Notify antes de bajar MQ para liberar la red compartida.
 
 ## Levantar
 
