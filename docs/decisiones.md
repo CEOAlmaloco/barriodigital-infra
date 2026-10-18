@@ -503,7 +503,7 @@ La alternativa era declarar solo el binding por el que publica la aplicación (t
 
 `notify` también declara los tres exchanges, de forma idempotente, y después las colas y los bindings. Así puede quedar healthy sin que `requests` haya arrancado. `requests` los vuelve a declarar al partir. Declarar dos veces el mismo exchange durable no cambia nada.
 
-En el compose de aplicaciones, `requests` depende de `notify` con `condition: service_healthy`. El healthcheck de `notify` exige conexión al broker y la topología ya declarada.
+El contrato del futuro publicador requiere que `requests` espere a `notify` y a su topología declarada. Esa dependencia aún no se incorpora: Requests no implementa la publicación. El health actual de Notify comprueba conexión al broker, no la existencia completa de exchanges, colas y bindings. La declaración automática y su comprobación explícita son pasos distintos; `UP` por sí solo no satisface toda esta garantía. La integración del publicador completará el orden y la verificación necesaria.
 
 Eso no alcanza solo. Si un mensaje sale cuando el exchange todavía no tiene bindings, RabbitMQ lo descarta sin error. La publicación usa `mandatory=true`. El callback de retorno registra en el log el mensaje devuelto: exchange, routing key y `eventId`. No se traga en silencio.
 
@@ -580,6 +580,30 @@ No hay métrica automática de tasa de DLQ en esta etapa. Se mira en dos sitios:
 
 - El log ERROR `mensaje-muerto` de notify, con la cola, el `eventId`, el motivo y los intentos.
 - El Management UI, en `q.cmd.email.dlq`, `q.cmd.crew.dlq` o `q.cmd.certificate.dlq`. Esas colas no tienen consumidor, así que el mensaje permanece y se puede abrir.
+
+## Certificados PDF y Compose (EP2-18)
+
+Notify acepta exclusivamente `certificate.receipt` y `certificate.resolved`, con comprobante de ingreso y certificado de resolución respectivamente. `certificate.gen` sigue siendo una routing key alternativa, no un tipo de documento. Reutiliza sin cambios el sobre, ACK manual, tres intentos, DLQ y deduplicación de EP2-15.
+
+`requestId` y `procedureType` son obligatorios, textuales y con contenido tras recortar espacios. `procedureLabel` es opcional y usa `procedureType` como respaldo. `address` es opcional y solo se muestra si tiene texto. Ausencia, null y blancos se admiten en esos opcionales; un valor no nulo y no textual se rechaza. No se usa ni valida `solicitanteEmail`, no se consulta el catálogo y `correlationId` no reemplaza `requestId`. No se exige UUID adicionalmente al parser compartido ni se modifica el payload.
+
+El comprobante dice «Tu trámite fue registrado en BarrioDigital con estado INGRESADO.» y el certificado «Tu trámite fue marcado como RESUELTO en BarrioDigital.». Muestran el identificador completo, tipo, dirección si existe y estado correspondiente al evento. No acreditan una consulta del estado actual ni la ejecución satisfactoria de trabajos. No incluyen datos municipales inventados, firmas, sellos, folios legales, QR ni afirmaciones de validez oficial.
+
+Al final del contenido aparecen el identificador completo del evento, su publicación cuando hay `timestamp` y la generación obtenida de un `Clock` inyectado. Ambas fechas usan `dd/MM/uuuu HH:mm:ss UTC`. El timestamp es publicación, no fecha de ingreso o resolución.
+
+PDFBox 3.0.8 genera A4 vertical, con márgenes de 20 mm, Inter estática regular/seminegrita incrustada y la marca textual vigente del frontend. Morado `#814B8B`, texto `#252329`, secundario `#68636B` y separadores `#DDD9DF`, sobre blanco. Las fuentes Inter 4.1 oficiales, licencia OFL 1.1 y procedencia están en Notify. Ajusta líneas según métricas, divide identificadores sin truncar y pagina con cabecera compacta y pie reservado. Un carácter no representable se rechaza indicando campo y código Unicode, sin datos personales; no se elimina silenciosamente. Recursos de fuente ausentes o corruptos impiden el inicio y no son errores de payload.
+
+`barriodigital.certificate.output-dir` se enlaza con `CERTIFICATE_OUTPUT_DIR`, con `./data/certificates` fuera de contenedores. En ambos Compose independientes de Apps se fija `/app/data/certificates` y se monta el volumen nombrado `certificates`. Recrear Notify o un `down` normal conserva los archivos; `down -v` de Apps elimina el volumen. Los archivos no se exponen por HTTP ni se adjuntan a correos.
+
+Los nombres son `certificate-receipt-<sha256-eventId>.pdf` y `certificate-resolved-<sha256-eventId>.pdf`. SHA-256 usa el identificador completo UTF-8 del parser, sin normalizarlo. No se usan datos de negocio como rutas. El directorio se crea al guardar, se rechazan enlaces/redirecciones y el destino queda controlado dentro de él. El directorio debe permanecer bajo administración del servicio; no se garantiza protección frente a modificaciones hostiles concurrentes de sus ancestros.
+
+La escritura usa un temporal exclusivo en el mismo directorio y publica el PDF cerrado mediante movimiento atómico. Reprocesar regenera y reemplaza la misma ruta, sin borrar primero el archivo anterior. Si falla la creación, escritura o publicación se conserva la causa en `RecoverableException`, se mantiene el archivo anterior y se intenta limpiar el temporal sin ocultar el fallo original. Si el proveedor no admite la operación atómica requerida, falla sin degradarse a copia o escritura directa. La capacidad de reemplazo se valida sobre el montaje real: las opciones de Java no garantizan idéntico comportamiento en todos los proveedores.
+
+Tras guardar se registra un INFO `certificate-pdf` con JSON compacto que contiene tipo, eventId y nombre. Solo entonces termina el handler y EP2-15 marca y confirma. Regenerar puede cambiar la fecha. Esto no añade deduplicación persistente, exclusión entre instancias ni garantía de exactamente una ejecución. Atomicidad de publicación no equivale a durabilidad absoluta ante pérdida de energía; una caída abrupta puede dejar temporales y no se añade limpieza indiscriminada.
+
+Local conecta Notify a Apps y a la red externa MQ, con nombres de ambos nodos. MQ debe iniciar primero, sin `depends_on` entre proyectos. EC2 usa la red Apps y exige un endpoint privado del nodo 1 mediante `RABBIT_ADDRESSES`. `RABBIT_AMQP_BIND_ADDRESS` permite publicar AMQP de MQ en su IP privada, conservando loopback por defecto y Management siempre en loopback. La conectividad privada se configura aparte, sin cambios AWS como parte de EP2-18. Logging sigue siendo el correo predeterminado; SMTP se activa por entorno.
+
+Queda adelantado de EP2-28 el servicio Notify en los dos Compose existentes, sus variables, red local, healthcheck y volumen. No se crea un Compose de demostración ni se modifica Requests. Validación reproducible en `apps/README.md` y en el README de Notify; los resultados efectivos se registran separadamente de procedimientos pendientes.
 
 ## Contrato: API de mq-admin (EP2-04)
 

@@ -3,7 +3,7 @@
 #   copy .env.example .env
 #   docker compose -f mq/compose.yml up -d
 #
-# 5672 (AMQP) y 15672 (Management) solo en 127.0.0.1, y solo desde el nodo 1.
+# AMQP usa RABBIT_AMQP_BIND_ADDRESS (loopback por defecto). Management queda en loopback.
 # El nodo 2 no publica puertos: se habla con el 1 por la red del compose.
 # Credenciales y cookie: mq/.env (plantilla en .env.example). Nunca en git.
 
@@ -15,7 +15,7 @@ services:
     container_name: rabbitmq-1
     hostname: rabbitmq-1
     ports:
-      - "127.0.0.1:5672:5672"
+      - "${RABBIT_AMQP_BIND_ADDRESS:-127.0.0.1}:5672:5672"
       - "127.0.0.1:15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?Definir mq/.env a partir de mq/.env.example}

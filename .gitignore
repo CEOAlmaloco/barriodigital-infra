@@ -8,4 +8,5 @@ wallet/
 .idea/
 .vscode/
 *.log
+.local/
 Thumbs.db
