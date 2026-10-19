@@ -654,6 +654,8 @@ Queda adelantado de EP2-28 el servicio Notify en los dos Compose existentes, sus
 
 Endpoints de administración de RabbitMQ, definidos antes de programarlos. Los implementa `mq-admin`. El BFF es el único cliente y ya filtra por rol, pero mq-admin vuelve a comprobar `X-User-Roles` y no se publica fuera de la red interna.
 
+En la EC2 de apps el contenedor es `bd-mq-admin` (imagen `barriodigital-apps-mq-admin:ep231`), puerto 8084 solo en la red del compose. El BFF tiene `MQ_ADMIN_BASE_URL=http://mq-admin:8084`. El Gateway llega al BFF en `/api/mq/{proxy+}`, no a mq-admin. mq-admin habla con el Management de RabbitMQ en `http://172.31.46.156:15672`; el security group de la EC2 de MQ acepta ese puerto desde el security group de apps, además del `/32` de la casa para la UI.
+
 No hay actualizar. En RabbitMQ una cola no se edita: hay que borrarla y crearla de nuevo. Las tres operaciones son crear, eliminar y vaciar.
 
 ### 1. Endpoints

@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "BarrioDigital",
-    "description": "Importar en Postman (Import > Raw text o el archivo). Correr la colección en orden con Collection Runner.\n\nLas carpetas del BFF usan el API Gateway de este lab (bffUrl). Health del BFF y la carpeta requests pegan a la EC2 de apps (appsUrl y requestsUrl). catalog no publica puerto: catalogUrl sigue en localhost:8082 y esa carpeta solo corre contra un catalog local.\n\nSin accessToken, la carpeta del BFF autenticado no exige 200. Para esos casos, pegar un access token de Entra en la variable accessToken de la colección.\n\nmq-admin no está en la EC2. notify no tiene API HTTP de negocio en esta colección.",
+    "description": "Importar en Postman (Import > Raw text o el archivo). Correr la colección en orden con Collection Runner.\n\nLas carpetas del BFF usan el API Gateway de este lab (bffUrl). Health del BFF y la carpeta requests pegan a la EC2 de apps (appsUrl y requestsUrl). catalog no publica puerto: catalogUrl sigue en localhost:8082 y esa carpeta solo corre contra un catalog local.\n\nSin accessToken, la carpeta del BFF autenticado no exige 200. Para esos casos, pegar un access token de Entra en la variable accessToken. Listar colas exige un token de Admin: Funcionario responde 403.\n\nnotify no tiene API HTTP de negocio en esta colección. mq-admin no publica puerto: se prueba por el Gateway, en las carpetas del BFF.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -262,6 +262,40 @@
             "body": { "mode": "raw", "raw": "{\n  \"status\": \"EN_GESTION\"\n}" },
             "url": "{{requestsUrl}}/api/requests/{{requestId}}/status"
           }
+        },
+        {
+          "name": "Pasar a EN_TERRENO",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', function () { pm.response.to.have.status(200); });",
+            "pm.test('EN_TERRENO', function () { pm.expect(pm.response.json().status).to.eql('EN_TERRENO'); });"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Id", "value": "{{funcionarioId}}" },
+              { "key": "X-User-Roles", "value": "Funcionario" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"EN_TERRENO\"\n}" },
+            "url": "{{requestsUrl}}/api/requests/{{requestId}}/status"
+          }
+        },
+        {
+          "name": "Resolver",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', function () { pm.response.to.have.status(200); });",
+            "pm.test('RESUELTO', function () { pm.expect(pm.response.json().status).to.eql('RESUELTO'); });"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Id", "value": "{{funcionarioId}}" },
+              { "key": "X-User-Roles", "value": "Funcionario" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"RESUELTO\"\n}" },
+            "url": "{{requestsUrl}}/api/requests/{{requestId}}/status"
+          }
         }
       ]
     },
@@ -470,6 +504,13 @@
             "body": { "mode": "raw", "raw": "{\n  \"status\": \"ADMITIDO\"\n}" },
             "url": "{{bffUrl}}/api/requests/{{requestId}}/status"
           }
+        },
+        {
+          "name": "Listar colas",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('401', function () { pm.response.to.have.status(401); });"
+          ] } }],
+          "request": { "method": "GET", "url": "{{bffUrl}}/api/mq/queues" }
         }
       ]
     },
@@ -556,6 +597,25 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": { "mode": "raw", "raw": "{\n  \"description\": \"Alta desde el BFF\",\n  \"procedureType\": \"bache\",\n  \"address\": \"Calle Postman 10\"\n}" },
             "url": "{{bffUrl}}/api/requests"
+          }
+        },
+        {
+          "name": "Listar colas",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const token = pm.collectionVariables.get('accessToken');",
+            "if (!token) { pm.test.skip('Falta accessToken de Admin'); }",
+            "else {",
+            "    pm.test('200', function () { pm.response.to.have.status(200); });",
+            "    pm.test('incluye q.cmd.email', function () {",
+            "        const names = pm.response.json().map(function (q) { return q.name; });",
+            "        pm.expect(names).to.include('q.cmd.email');",
+            "    });",
+            "}"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": "{{bffUrl}}/api/mq/queues"
           }
         }
       ]

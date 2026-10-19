@@ -12,3 +12,4 @@ wallet/
 *.log
 .local/
 Thumbs.db
+docs/guion-demo.md
