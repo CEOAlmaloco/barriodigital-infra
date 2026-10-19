@@ -8,6 +8,7 @@ Documentación compartida de BarrioDigital (no es un compose).
 | `arquitectura.md` | Diagramas del flujo desplegado (Amplify → API Gateway → BFF → requests → Oracle) |
 | `matriz-funcionalidades.md` | Estado real de cada funcionalidad, con componente y evidencia |
 | `rabbitmq-mensaje-muerto.md` | Exchanges, colas y bindings de RabbitMQ, y cómo dejar un mensaje en una DLQ |
+| `rabbitmq.md` | Recorrido en la nube: alta, cupo, terreno, resolución, DLQ, broker detenido y restart del compose |
 
 Pendiente de ir agregando:
 
