@@ -1,3 +1,5 @@
+target/
+node_modules/
 .env
 .env.*
 !.env.example
@@ -8,4 +10,6 @@ wallet/
 .idea/
 .vscode/
 *.log
+.local/
 Thumbs.db
+docs/guion-demo.md

@@ -1,14 +1,52 @@
-# BarrioDigital — BFF + requests en una EC2
+# BarrioDigital — BFF + requests + catalog + notify
 # Uso:
 #   docker compose --env-file .env up -d --build
 #
 # Requiere:
 #   - .env junto a este archivo (no subir a git)
 #   - carpeta ./wallet con el Autonomous wallet descomprimido
+#   - MQ iniciado: Notify comparte la red externa de ese proyecto
+# catalog no publica puerto. El BFF espera a que su health esté UP.
 
 name: barriodigital-apps
 
 services:
+  notify:
+    build:
+      context: ../../ms-barriodigital-notify
+      dockerfile: Dockerfile
+    container_name: bd-notify
+    expose:
+      - "8083"
+    environment:
+      RABBIT_ADDRESSES: ${RABBIT_ADDRESSES:-rabbitmq-1:5672,rabbitmq-2:5672}
+      RABBIT_USER: ${RABBIT_USER:-barriodigital}
+      RABBIT_PASSWORD: ${RABBIT_PASSWORD:?Definir RABBIT_PASSWORD}
+      CERTIFICATE_OUTPUT_DIR: /app/data/certificates
+      EMAIL_MODE: ${EMAIL_MODE:-logging}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-25}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_AUTH: ${SMTP_AUTH:-false}
+      SMTP_STARTTLS_ENABLE: ${SMTP_STARTTLS_ENABLE:-false}
+      SMTP_STARTTLS_REQUIRED: ${SMTP_STARTTLS_REQUIRED:-false}
+      SMTP_CONNECTION_TIMEOUT: ${SMTP_CONNECTION_TIMEOUT:-5000}
+      SMTP_READ_TIMEOUT: ${SMTP_READ_TIMEOUT:-5000}
+      SMTP_WRITE_TIMEOUT: ${SMTP_WRITE_TIMEOUT:-5000}
+    volumes:
+      - certificates:/app/data/certificates
+    networks:
+      - default
+      - mq
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "4", "http://localhost:8083/actuator/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
   requests:
     build:
       context: ../../ms-barriodigital-requests
@@ -21,10 +59,40 @@ services:
       ORACLE_USER: ${ORACLE_USER}
       ORACLE_PASSWORD: ${ORACLE_PASSWORD}
       ORACLE_WALLET_DIR: /wallet
+      RABBIT_ADDRESSES: ${RABBIT_ADDRESSES:-rabbitmq-1:5672,rabbitmq-2:5672}
+      RABBIT_USER: ${RABBIT_USER:-barriodigital}
+      RABBIT_PASSWORD: ${RABBIT_PASSWORD:?Definir RABBIT_PASSWORD}
+    volumes:
+      - ${WALLET_HOST_PATH:-./wallet}:/wallet:ro
+    networks:
+      - default
+      - mq
+    depends_on:
+      notify:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  catalog:
+    build:
+      context: ../../ms-barriodigital-catalog
+      dockerfile: Dockerfile
+    container_name: bd-catalog
+    expose:
+      - "8082"
+    environment:
+      ORACLE_URL: ${ORACLE_URL}
+      ORACLE_USER: ${ORACLE_USER}
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD}
+      ORACLE_WALLET_DIR: /wallet
     volumes:
       - ${WALLET_HOST_PATH:-./wallet}:/wallet:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
       interval: 20s
       timeout: 5s
       retries: 10
@@ -41,12 +109,25 @@ services:
       AZURE_ISSUER_URI: ${AZURE_ISSUER_URI}
       AZURE_AUDIENCES: ${AZURE_AUDIENCES}
       REQUESTS_BASE_URL: http://requests:8081
+      CATALOG_BASE_URL: http://catalog:8082
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:4200}
     depends_on:
-      - requests
+      requests:
+        condition: service_started
+      catalog:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 20s
       timeout: 5s
       retries: 10
       start_period: 40s
+
+volumes:
+  certificates:
+
+networks:
+  default:
+  mq:
+    external: true
+    name: ${RABBIT_NETWORK_NAME:-barriodigital-mq_default}
