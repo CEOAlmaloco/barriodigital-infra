@@ -107,7 +107,29 @@ La EC2 de apps es una `t3.medium` (~4 GiB). Los dos compose fijan `mem_limit` po
 
 `requests` es el más pesado (Oracle + RabbitMQ). `mq-admin` es el más liviano. Cuando entre kafka-admin al compose se usan los valores reservados; si luego llegan report o audit, hay que repartir el margen restante o evaluar una instancia más grande.
 
-Medición con `docker stats` en la EC2 antes y después de aplicar los límites: pendiente de registrar en esta sección tras el despliegue.
+Medición con `docker stats --no-stream` en la EC2 de apps (`t3.medium`, 3839 MB), 5-nov-2026. El compose de despliegue usa `JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=65.0 -XX:+ExitOnOutOfMemoryError` (heap ~65% del límite, equivalente al `-Xmx` de los compose versionados).
+
+Antes (límites planos 768m/512m heredados del despliegue manual):
+
+| Servicio | Uso / límite |
+|---|---|
+| bd-bff | 182.3MiB / 768MiB |
+| bd-notify | 182MiB / 768MiB |
+| bd-requests | 298.6MiB / 768MiB |
+| bd-catalog | 302.1MiB / 768MiB |
+| bd-mq-admin | 178.5MiB / 512MiB |
+
+Después de aplicar los límites de esta tabla:
+
+| Servicio | Uso / límite |
+|---|---|
+| bd-bff | 159.7MiB / 512MiB |
+| bd-notify | 171.2MiB / 512MiB |
+| bd-requests | 267.1MiB / 768MiB |
+| bd-catalog | 244.4MiB / 512MiB |
+| bd-mq-admin | 161.5MiB / 384MiB |
+
+El tope total bajó de 3584 MB a 2688 MB y el uso real quedó en ~1.0 GiB. Los 5 servicios quedaron `healthy` y el BFF responde 401 sin token en `/api/requests`, `/api/catalog` y `/api/mq/queues` (el humo con JWT se hace desde el front).
 
 ## Notify y certificados (EP2-18)
 
