@@ -92,6 +92,45 @@ Plantilla en `.env.example`; los valores de Entra ID están en `../docs/decision
 - **notify, 8083.** Solo `expose`, sin `ports`, rutas públicas, BFF ni API Gateway. `docker compose exec notify curl -fsS http://localhost:8083/actuator/health`.
 - **mq-admin, 8084.** Solo `expose`, sin `ports`. El BFF lo llama por `MQ_ADMIN_BASE_URL`. `docker compose exec mq-admin curl -fsS http://localhost:8084/actuator/health`.
 
+## Límites de memoria (EP3-16)
+
+La EC2 de apps es una `t3.medium` (~4 GiB). Los dos compose fijan `mem_limit` por servicio y `JAVA_TOOL_OPTIONS=-Xmx...` para que la JVM no crezca sin tope. Presupuesto total de límites: **2688 MB** con los 5 servicios actuales y **3200 MB** reservando kafka-admin; quedan ~500 MB para el SO, Docker y picos de GC.
+
+| Servicio | `mem_limit` | `-Xmx` |
+|---|---|---|
+| requests | 768m | 512m |
+| catalog | 512m | 384m |
+| notify | 512m | 384m |
+| bff | 512m | 384m |
+| mq-admin | 384m | 256m |
+| kafka-admin (reservado, EP3-17+) | 512m | 384m |
+
+`requests` es el más pesado (Oracle + RabbitMQ). `mq-admin` es el más liviano. Cuando entre kafka-admin al compose se usan los valores reservados; si luego llegan report o audit, hay que repartir el margen restante o evaluar una instancia más grande.
+
+Medición con `docker stats --no-stream` en la EC2 de apps (`t3.medium`, 3839 MB), 5-nov-2026. El compose de despliegue usa `JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=65.0 -XX:+ExitOnOutOfMemoryError` (heap ~65% del límite, equivalente al `-Xmx` de los compose versionados).
+
+Antes (límites planos 768m/512m heredados del despliegue manual):
+
+| Servicio | Uso / límite |
+|---|---|
+| bd-bff | 182.3MiB / 768MiB |
+| bd-notify | 182MiB / 768MiB |
+| bd-requests | 298.6MiB / 768MiB |
+| bd-catalog | 302.1MiB / 768MiB |
+| bd-mq-admin | 178.5MiB / 512MiB |
+
+Después de aplicar los límites de esta tabla:
+
+| Servicio | Uso / límite |
+|---|---|
+| bd-bff | 159.7MiB / 512MiB |
+| bd-notify | 171.2MiB / 512MiB |
+| bd-requests | 267.1MiB / 768MiB |
+| bd-catalog | 244.4MiB / 512MiB |
+| bd-mq-admin | 161.5MiB / 384MiB |
+
+El tope total bajó de 3584 MB a 2688 MB y el uso real quedó en ~1.0 GiB. Los 5 servicios quedaron `healthy` y el BFF responde 401 sin token en `/api/requests`, `/api/catalog` y `/api/mq/queues` (el humo con JWT se hace desde el front).
+
 ## Notify y certificados (EP2-18)
 
 Los dos Compose construyen Notify con su Dockerfile. Pasan explícitamente `RABBIT_ADDRESSES`, `RABBIT_USER`, `RABBIT_PASSWORD`, `EMAIL_MODE`, `EMAIL_FROM` y las variables `SMTP_*` de la plantilla. `--env-file` permite interpolar: no inyecta automáticamente todo el archivo. Logging es el modo de correo predeterminado y no envía mensajes reales. SMTP se activa con `EMAIL_MODE=smtp` y su configuración completa.

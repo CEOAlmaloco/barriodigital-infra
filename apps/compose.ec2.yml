@@ -7,9 +7,11 @@ services:
       context: ./ms-barriodigital-notify
       dockerfile: Dockerfile
     container_name: bd-notify
+    mem_limit: 512m
     expose:
       - "8083"
     environment:
+      JAVA_TOOL_OPTIONS: "-Xmx384m"
       RABBIT_ADDRESSES: ${RABBIT_ADDRESSES:?Definir endpoint privado de EC2-MQ}
       RABBIT_USER: ${RABBIT_USER:-barriodigital}
       RABBIT_PASSWORD: ${RABBIT_PASSWORD:?Definir RABBIT_PASSWORD}
@@ -41,9 +43,11 @@ services:
       context: ./ms-barriodigital-mq-admin
       dockerfile: Dockerfile
     container_name: bd-mq-admin
+    mem_limit: 384m
     expose:
       - "8084"
     environment:
+      JAVA_TOOL_OPTIONS: "-Xmx256m"
       RABBITMQ_HOST: ${RABBITMQ_HOST:?Definir DNS o IP privada de EC2-MQ}
       RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
       RABBITMQ_USER: ${RABBITMQ_USER:-barriodigital}
@@ -63,9 +67,11 @@ services:
       context: ./ms-barriodigital-requests
       dockerfile: Dockerfile
     container_name: bd-requests
+    mem_limit: 768m
     ports:
       - "8081:8081"
     environment:
+      JAVA_TOOL_OPTIONS: "-Xmx512m"
       ORACLE_URL: ${ORACLE_URL}
       ORACLE_USER: ${ORACLE_USER}
       ORACLE_PASSWORD: ${ORACLE_PASSWORD}
@@ -85,9 +91,11 @@ services:
       context: ./ms-barriodigital-catalog
       dockerfile: Dockerfile
     container_name: bd-catalog
+    mem_limit: 512m
     expose:
       - "8082"
     environment:
+      JAVA_TOOL_OPTIONS: "-Xmx384m"
       ORACLE_URL: ${ORACLE_URL}
       ORACLE_USER: ${ORACLE_USER}
       ORACLE_PASSWORD: ${ORACLE_PASSWORD}
@@ -107,9 +115,11 @@ services:
       context: ./ms-barriodigital-bff
       dockerfile: Dockerfile
     container_name: bd-bff
+    mem_limit: 512m
     ports:
       - "8080:8080"
     environment:
+      JAVA_TOOL_OPTIONS: "-Xmx384m"
       AZURE_ISSUER_URI: ${AZURE_ISSUER_URI}
       AZURE_AUDIENCES: ${AZURE_AUDIENCES}
       REQUESTS_BASE_URL: ${REQUESTS_BASE_URL:-http://requests:8081}
