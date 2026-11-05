@@ -890,7 +890,7 @@ Todos los eventos de los dos tópicos comparten el mismo sobre.
 
 No se deben unificar estos nombres con los de EP2-01.
 
-**`sequence`.** Se obtiene de la columna `sequence` de `outbox_events`, que es identity con `ORDER`. El relay la incorpora al sobre en el momento de publicar, porque el número se conoce recién al insertar la fila en el outbox. Garantiza el orden real de los eventos de un mismo trámite (EP3-02). Los consumidores que mantienen el estado actual de un trámite ignoran un evento con `sequence` menor al último aplicado para ese trámite, sin dejar de contarlo en las métricas históricas.
+**`sequence`.** Se obtiene de la columna `event_sequence` de `outbox_events`, que es identity con `ORDER` (la columna no se llama `sequence` porque es palabra clave de Oracle; EP3-02). El relay la incorpora al sobre en el momento de publicar, porque el número se conoce recién al insertar la fila en el outbox. Garantiza el orden real de los eventos de un mismo trámite (EP3-02). Los consumidores que mantienen el estado actual de un trámite ignoran un evento con `sequence` menor al último aplicado para ese trámite, sin dejar de contarlo en las métricas históricas.
 
 **`traceId`.** Lo genera cada productor como un UUID al iniciar la operación. En requests, el evento de Kafka y los comandos de RabbitMQ que salen del mismo cambio comparten el mismo `traceId`. Un evento reprocesado desde la DLT conserva el suyo.
 
