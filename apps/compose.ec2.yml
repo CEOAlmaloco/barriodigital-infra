@@ -50,6 +50,12 @@ services:
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Definir RABBITMQ_PASSWORD}
       RABBITMQ_MANAGEMENT_URL: ${RABBITMQ_MANAGEMENT_URL:?Definir URL de Management de EC2-MQ}
       RABBITMQ_VHOST: ${RABBITMQ_VHOST:-/}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "4", "http://localhost:8084/actuator/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
     restart: unless-stopped
 
   requests:

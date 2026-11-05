@@ -65,6 +65,12 @@ services:
     networks:
       - default
       - mq
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "4", "http://localhost:8084/actuator/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
 
   requests:
     build:
