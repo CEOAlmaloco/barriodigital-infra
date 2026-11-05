@@ -1,10 +1,10 @@
-# apps/ — ec2-apps (BFF + requests + catalog + notify)
+# apps/ — ec2-apps (BFF + requests + catalog + notify + mq-admin)
 
 Compose del mundo **apps** (una EC2). Cada microservicio trae su propio `Dockerfile` en su repo.
 
 ## Local (repos hermanos)
 
-Desde esta carpeta, con los repositorios de BFF, requests, catalog y notify al mismo nivel que `barriodigital-infra`. El arranque y la recuperación habituales utilizan Docker Compose.
+Desde esta carpeta, con los repositorios de BFF, requests, catalog, notify y mq-admin al mismo nivel que `barriodigital-infra`. El arranque y la recuperación habituales utilizan Docker Compose.
 
 Requiere Docker con Compose y soporte `--wait`, credenciales Oracle, wallet de Autonomous y configuración
 Entra del BFF. Para la primera configuración, crear los entornos desde las plantillas versionadas:
@@ -38,9 +38,9 @@ curl -i http://localhost:8081/actuator/health
 
 ## EC2 (layout plano `~/barriodigital`)
 
-Usar `compose.ec2.yml` cuando BFF, requests, catalog, wallet y `.env` viven juntos. Catalog se construye antes y el BFF espera su health: si se recrea el BFF con catalog caído, el alta responde 503.
+Usar `compose.ec2.yml` cuando BFF, requests, catalog, notify, mq-admin, wallet y `.env` viven juntos. Catalog se construye antes y el BFF espera su health: si se recrea el BFF con catalog caído, el alta responde 503.
 
-Los archivos son independientes: no combinar ambos con `-f`. Añadir también el repo de Notify al layout plano. Configurar `RABBIT_ADDRESSES` con el DNS o IP privada de EC2-MQ y AMQP accesible desde EC2-Apps. No sirven `localhost` ni los nombres Docker de otro host. La configuración remota actual ofrece solo el endpoint del nodo 1, sin failover al nodo 2. No se añade una red bridge entre EC2 distintas.
+Los archivos son independientes: no combinar ambos con `-f`. Añadir también los repos de Notify y mq-admin al layout plano. Configurar `RABBIT_ADDRESSES` con el DNS o IP privada de EC2-MQ y AMQP accesible desde EC2-Apps. No sirven `localhost` ni los nombres Docker de otro host. La configuración remota actual ofrece solo el endpoint del nodo 1, sin failover al nodo 2. No se añade una red bridge entre EC2 distintas.
 
 Para preparar ese layout desde un clon limpio, situarse en el directorio que contiene los repositorios
 hermanos, incluido `barriodigital-infra`. Copiar los archivos versionados para la primera configuración:
@@ -77,9 +77,12 @@ Plantilla en `.env.example`; los valores de Entra ID están en `../docs/decision
 | `ORACLE_USER`, `ORACLE_PASSWORD` | Usuario de la aplicación en Oracle. Si la password tiene `$`, en este `.env` va como `$$` |
 | `CORS_ALLOWED_ORIGINS` | Orígenes del front separados por coma; por defecto `http://localhost:4200` |
 | `WALLET_HOST_PATH` | Solo `compose.yml`: ruta del wallet en el host; por defecto `./wallet` |
+| `REQUESTS_BASE_URL` | `http://requests:8081`. El compose se la pasa al BFF |
 | `CATALOG_BASE_URL` | `http://catalog:8082`. El compose se la pasa al BFF. Catalog usa las mismas `ORACLE_*` y el mismo wallet |
+| `MQ_ADMIN_BASE_URL` | `http://mq-admin:8084`. El compose se la pasa al BFF. mq-admin no publica puerto |
 | `RABBIT_ADDRESSES`, `RABBIT_USER`, `RABBIT_PASSWORD` | Se pasan explícitamente a Requests y Notify. Local: nodos de la red MQ; EC2: endpoint privado del nodo 1 |
-| `RABBIT_NETWORK_NAME` | Solo local: red externa MQ compartida por Requests y Notify |
+| `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD`, `RABBITMQ_MANAGEMENT_URL`, `RABBITMQ_VHOST` | Solo mq-admin. Local: `rabbitmq-1`, `5672`, `http://rabbitmq-1:15672`, `/`. EC2: DNS o IP privada de EC2-MQ. Usuario y password deben coincidir con los de MQ |
+| `RABBIT_NETWORK_NAME` | Solo local: red externa MQ compartida por Requests, Notify y mq-admin |
 
 ## Puertos
 
@@ -87,12 +90,13 @@ Plantilla en `.env.example`; los valores de Entra ID están en `../docs/decision
 - **requests, 8081.** Los dos compose lo publican en el host (sirve para el health check local), así que en la EC2 el security group no debe abrir el 8081, solo el 8080.
 - **catalog, 8082.** Solo `expose`, sin `ports`. No se abre en el security group. El health se mira dentro del contenedor: `docker compose exec catalog curl -f http://localhost:8082/actuator/health`.
 - **notify, 8083.** Solo `expose`, sin `ports`, rutas públicas, BFF ni API Gateway. `docker compose exec notify curl -fsS http://localhost:8083/actuator/health`.
+- **mq-admin, 8084.** Solo `expose`, sin `ports`. El BFF lo llama por `MQ_ADMIN_BASE_URL`. `docker compose exec mq-admin curl -fsS http://localhost:8084/actuator/health`.
 
 ## Notify y certificados (EP2-18)
 
 Los dos Compose construyen Notify con su Dockerfile. Pasan explícitamente `RABBIT_ADDRESSES`, `RABBIT_USER`, `RABBIT_PASSWORD`, `EMAIL_MODE`, `EMAIL_FROM` y las variables `SMTP_*` de la plantilla. `--env-file` permite interpolar: no inyecta automáticamente todo el archivo. Logging es el modo de correo predeterminado y no envía mensajes reales. SMTP se activa con `EMAIL_MODE=smtp` y su configuración completa.
 
-En local Notify y Requests usan las redes de Apps y `${RABBIT_NETWORK_NAME:-barriodigital-mq_default}`; RabbitMQ se resuelve como `rabbitmq-1:5672,rabbitmq-2:5672`. Si se cambia el proyecto MQ con `-p`, ajustar `RABBIT_NETWORK_NAME`.
+En local Notify, Requests y mq-admin usan las redes de Apps y `${RABBIT_NETWORK_NAME:-barriodigital-mq_default}`; RabbitMQ se resuelve como `rabbitmq-1:5672,rabbitmq-2:5672`. mq-admin habla AMQP con `RABBITMQ_HOST`/`RABBITMQ_PORT` y Management con `RABBITMQ_MANAGEMENT_URL`. Si se cambia el proyecto MQ con `-p`, ajustar `RABBIT_NETWORK_NAME`.
 
 En ambos entornos `CERTIFICATE_OUTPUT_DIR=/app/data/certificates` coincide con el montaje de lectura/escritura `certificates:/app/data/certificates`. El volumen nombrado pertenece al proyecto Apps; con su nombre actual es `barriodigital-apps_certificates`. Recrear Notify o un `down` normal conserva los PDF. **`down -v` elimina ese volumen y sus certificados.** No utilizarlo para actualizar Notify. Los datos son locales al host, no compartidos entre EC2 ni entre motores Docker.
 
