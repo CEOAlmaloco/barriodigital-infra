@@ -92,6 +92,23 @@ Plantilla en `.env.example`; los valores de Entra ID están en `../docs/decision
 - **notify, 8083.** Solo `expose`, sin `ports`, rutas públicas, BFF ni API Gateway. `docker compose exec notify curl -fsS http://localhost:8083/actuator/health`.
 - **mq-admin, 8084.** Solo `expose`, sin `ports`. El BFF lo llama por `MQ_ADMIN_BASE_URL`. `docker compose exec mq-admin curl -fsS http://localhost:8084/actuator/health`.
 
+## Límites de memoria (EP3-16)
+
+La EC2 de apps es una `t3.medium` (~4 GiB). Los dos compose fijan `mem_limit` por servicio y `JAVA_TOOL_OPTIONS=-Xmx...` para que la JVM no crezca sin tope. Presupuesto total de límites: **2688 MB** con los 5 servicios actuales y **3200 MB** reservando kafka-admin; quedan ~500 MB para el SO, Docker y picos de GC.
+
+| Servicio | `mem_limit` | `-Xmx` |
+|---|---|---|
+| requests | 768m | 512m |
+| catalog | 512m | 384m |
+| notify | 512m | 384m |
+| bff | 512m | 384m |
+| mq-admin | 384m | 256m |
+| kafka-admin (reservado, EP3-17+) | 512m | 384m |
+
+`requests` es el más pesado (Oracle + RabbitMQ). `mq-admin` es el más liviano. Cuando entre kafka-admin al compose se usan los valores reservados; si luego llegan report o audit, hay que repartir el margen restante o evaluar una instancia más grande.
+
+Medición con `docker stats` en la EC2 antes y después de aplicar los límites: pendiente de registrar en esta sección tras el despliegue.
+
 ## Notify y certificados (EP2-18)
 
 Los dos Compose construyen Notify con su Dockerfile. Pasan explícitamente `RABBIT_ADDRESSES`, `RABBIT_USER`, `RABBIT_PASSWORD`, `EMAIL_MODE`, `EMAIL_FROM` y las variables `SMTP_*` de la plantilla. `--env-file` permite interpolar: no inyecta automáticamente todo el archivo. Logging es el modo de correo predeterminado y no envía mensajes reales. SMTP se activa con `EMAIL_MODE=smtp` y su configuración completa.
