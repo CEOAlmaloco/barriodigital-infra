@@ -87,12 +87,15 @@ miembros y el tópico se eliminó.
 
 ```bash
 docker scout cves --format sarif confluentinc/cp-zookeeper:7.9.10 \
-  > ../docs/evidencias/kafka-confluentinc_cp-zookeeper_7.9.10.sarif
+  | gzip > ../docs/evidencias/kafka-confluentinc_cp-zookeeper_7.9.10.sarif.gz
 docker scout cves --format sarif confluentinc/cp-kafka:7.9.10 \
-  > ../docs/evidencias/kafka-confluentinc_cp-kafka_7.9.10.sarif
+  | gzip > ../docs/evidencias/kafka-confluentinc_cp-kafka_7.9.10.sarif.gz
 docker scout cves --format sarif kafbat/kafka-ui:v1.5.0 \
-  > ../docs/evidencias/kafka-kafbat_kafka-ui_v1.5.0.sarif
+  | gzip > ../docs/evidencias/kafka-kafbat_kafka-ui_v1.5.0.sarif.gz
 ```
+
+Los `.sarif.gz` se descomprimen con `gunzip -c archivo.sarif.gz` (~4.4 MB
+each).
 
 Los tres tags son el último parche disponible (cp-kafka/cp-zookeeper `7.9.10`
 dentro de la línea 7.x exigida; kafka-ui `v1.5.0`). Aun así quedan CVEs HIGH
