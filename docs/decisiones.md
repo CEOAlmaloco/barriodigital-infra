@@ -2749,7 +2749,7 @@ WHERE closed_at IS NULL AND due_date IS NOT NULL
 Tres procesos escriben la misma proyección: el listener, el recálculo al arrancar y el job diario. La regla es: **el listener bloquea la fila, y los procesos derivados escriben solo sus columnas.**
 
 1. **El listener lee la proyección con `PESSIMISTIC_WRITE`** (`findByIdForUpdate`), dentro de su transacción. Al proyectar un cierre lee `dueDate` para evaluar el resultado, y solo el bloqueo protege esa lectura: si el recálculo llegó primero, el listener espera y lee la fila corregida; si el listener llegó primero, el recálculo espera. `@DynamicUpdate` no alcanza, porque no protege la lectura.
-2. **El recálculo al arrancar** recorre los trámites abiertos con `created_at` y `sla_business_days` no nulos. Así deja fuera a los trámites sin plazo y a las proyecciones parciales, que no tienen desde dónde contar. Escribe con un `UPDATE` acotado por trámite (`@Modifying`), que solo toca `due_date` y `due_soon_date`, con `WHERE id = :id AND closed_at IS NULL`. Va un `UPDATE` por trámite porque contar días hábiles necesita el calendario en Java.
+2. **El recálculo al arrancar** recorre los trámites abiertos con `created_at` y `sla_business_days` no nulos. Así deja fuera a los trámites sin plazo y a las proyecciones parciales, que no tienen desde dónde contar. Escribe con un `UPDATE` acotado por trámite (`@Modifying`), que solo toca `due_date` y `due_soon_date`, con `WHERE id = :id AND closed_at IS NULL`. **Cada trámite va en su propia transacción**, y se recorren por `id` ascendente. Va un `UPDATE` por trámite porque contar días hábiles necesita el calendario en Java.
 3. **El job diario** escribe con el `UPDATE` de estado sobre el conjunto de la sección 5.1.
 4. **Ningún proceso derivado lee la fila, la modifica en Java y la guarda completa.** En Oracle, un `UPDATE` que encuentra la fila cambiada por otra transacción vuelve a evaluar el `WHERE`: un trámite cerrado entremedio ya no cumple `closed_at IS NULL` y no se toca.
 5. **El listener parte con `autoStartup=false`** y se inicia al terminar el recálculo y el `UPDATE` de estado. Ordena el arranque. Lo que garantiza la corrección son las reglas 1 a 4.
@@ -2757,11 +2757,12 @@ Tres procesos escriben la misma proyección: el listener, el recálculo al arran
 
 #### 5.3 Deadlocks
 
-Además de la proyección, `KpiService` actualiza filas de conteo compartidas entre los tres hilos del listener (EP3-36). Para que no se forme un ciclo:
-1. **Orden fijo:** primero la proyección y después los conteos, siempre en el mismo orden por clave.
-2. **El deadlock es recuperable.** Oracle cancela una de las sentencias (`ORA-00060`), y Spring lo traduce a una subclase de `PessimisticLockingFailureException`. `DefaultErrorHandler` reintenta todo lo que no se registró como no recuperable, así que esa excepción **no** se registra como no recuperable.
+``report`` no tiene contadores compartidos: los KPIs son consultas agregadas sobre la proyección (EP3-07). Un ciclo de bloqueos necesita al menos dos transacciones que tengan cada una una fila y esperen la de la otra:
 
-Contra el job y el recálculo no hay ciclo: solo tocan proyecciones, y el listener no espera ninguna fila que ellos tengan. Calcular "estados activos" con un `COUNT` sobre las proyecciones, sin contadores compartidos, es una alternativa que puede decidir EP3-07 o EP3-36.
+1. **El listener** bloquea solo la proyección de su trámite y no espera ninguna otra fila. Dos hilos nunca comparten una proyección, porque un trámite siempre cae en la misma partición.
+2. **El recálculo** va un trámite por transacción (sección 5.2), así que cada transacción tiene una sola fila y no puede formar un ciclo.
+3. **El `UPDATE` de estado** es el único que bloquea muchas filas en una sentencia. Con dos instancias (la prueba de balanceo de EP3-36), los dos jobs de las 00:05, o los dos arranques, pueden correr la misma sentencia a la vez y recorrer las filas en distinto orden. Si Oracle cancela una con `ORA-00060`, la sentencia completa se revierte, sin dejar nada a medias, y **se reintenta una vez**. Es seguro porque es idempotente. Si vuelve a fallar, se registra en el log y lo corrige la siguiente ejecución o el siguiente arranque.
+4. **En el listener, un deadlock es recuperable** por si ocurriera. Spring traduce `ORA-00060` a una subclase de `PessimisticLockingFailureException`, y `DefaultErrorHandler` reintenta todo lo que no se registró como no recuperable, así que esa excepción **no** se registra como no recuperable.
 
 ### 6. Trámites sin plazo y trámites anteriores al outbox
 
@@ -2821,8 +2822,8 @@ La fila "Ver el estado del plazo" de la matriz de EP3-04 sigue en No para el Vec
 | **catalog** | Columna `sla_business_days` nullable, `slaBusinessDays` en `ProcedureView`, POST y PUT con la sección 1.1. Lectura estricta y manejador de `HttpMessageNotReadableException` de la sección 1.2 | EP3-24 |
 | **BFF** | `X-Procedure-Sla-Days` en el alta, sin header si no hay plazo | EP3-25 |
 | **requests** | Columna del snapshot, `slaBusinessDays` en `request.created` y en `RequestView` | EP3-31 |
-| **report**, consumidor | Proyección con `closedAt`, bloqueo de la proyección, orden fijo de filas y proyección parcial | EP3-36 |
-| **report**, plazos | Cálculo de `dueDate`, `dueSoonDate` y `slaStatus` al proyectar el alta y el cierre, `holidays-cl.yml`, recálculo al arrancar, `UPDATE` de estado al arrancar y a las 00:05, health del calendario y endpoint de plazos | EP3-38 |
+| **report**, consumidor | Proyección con `createdAt`, `slaBusinessDays` y `closedAt`, bloqueo de la proyección y proyección parcial | EP3-36 |
+| **report**, plazos | Cálculo de `dueDate`, `dueSoonDate` y `slaStatus` al proyectar el alta y el cierre, `holidays-cl.yml`, recálculo al arrancar, `UPDATE` de estado al arrancar y a las 00:05 con su reintento ante deadlock, health del calendario y endpoints de plazos | EP3-38 |
 | **frontend** | `slaStatus` con su texto en listado, detalle e `/inicio`. Plazo en días para el Vecino. Edición de `slaBusinessDays` por el Admin | EP3-46, EP3-52, EP3-53 |
 
 **Tests que pide este contrato**, además de los de cada ficha:
