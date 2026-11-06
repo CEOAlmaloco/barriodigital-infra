@@ -224,6 +224,8 @@ El filtrado por active es responsabilidad del frontend, no del backend: el formu
 
 Respuesta `200` con el objeto actualizado completo.
 
+**Actualización (EP3-06, 6-nov-2026):** catalog lee el body de forma estricta (`accept-float-as-int: false` y `allow-coercion-of-scalars: false`). Un número o un booleano enviado como string o como decimal responde 400: `active: "true"`, `dailyQuota: "5"` o `dailyQuota: 5.0` ya no se aceptan. El frontend ya envía los tipos correctos. Los mensajes están en EP3-06, sección 1.
+
 ### 4. Validación de value
 
 Solo en POST, debe cumplir `^[a-z0-9_-]+$` (minúsculas, sin espacios ni tildes), mismo formato que los 6 valores ya existentes (bache, alumbrado, basura, agua, ruido, otro).
@@ -262,6 +264,8 @@ Ninguna otra transición de estado participa de la orquestación de cupo: el cup
 | `dailyQuota` | integer, nullable | `null` significa sin límite, `reserve` nunca falla por cupo para ese tipo. No se puede setear en POST (EP1.5-02), solo después vía PUT. |
 | `remainingQuota` | integer, nullable | refleja el cupo disponible hoy. `null` cuando `dailyQuota` es `null`. |
 | `quotaResetDate` | date | columna interna de persistencia, **no se serializa** en ninguna respuesta de la API. |
+
+Desde EP3-06, `dailyQuota` tiene que llegar como entero de JSON: como string o decimal responde 400 (EP1.5-02, sección 3, actualización del 6-nov-2026).
 
 **Reset perezoso:** en la primera llamada a `reserve` del día, si `quotaResetDate` es distinto a la fecha actual, se repone `remainingQuota` a `dailyQuota` y se actualiza `quotaResetDate`, antes de aplicar el descuento.
 
@@ -1005,9 +1009,9 @@ Los permisos y el motivo se definen en EP3-05.
     "folio": "BD-2026-000123",
     "procedureType": "bache",
     "procedureLabel": "Bache en calle",
-    "sector": "Centro",
-    "latitude": -33.0245,
-    "longitude": -71.5518,
+    "sector": "ralco",
+    "latitude": -37.9946,
+    "longitude": -71.4962,
     "status": "INGRESADO",
     "slaBusinessDays": 5
   }
@@ -1030,7 +1034,7 @@ Los permisos y el motivo se definen en EP3-05.
     "requestId": "7b6e1d44-2a18-4c90-9f01-88aa11bb22cc",
     "folio": "BD-2026-000123",
     "procedureType": "bache",
-    "sector": "Centro",
+    "sector": "ralco",
     "fromStatus": "ADMITIDO",
     "toStatus": "RECHAZADO",
     "reason": "Direccion fuera de la comuna"
@@ -2189,7 +2193,7 @@ Un Vecino que intenta operar un trámite ajeno recibe 403 en el paso 2, antes de
 
 #### 6.1 Proyección por rol
 
-requests deja de serializar la entidad `MunicipalRequest` y responde con `RequestView`, armado según el rol de quien llama. `RequestView` **conserva los nombres de campo del JSON actual** y solo agrega `hasAssignee`, así que el BFF y el frontend no cambian por la proyección.
+requests deja de serializar la entidad `MunicipalRequest` y responde con `RequestView`, armado según el rol de quien llama. `RequestView` **conserva los nombres de campo del JSON actual** y agrega `hasAssignee`, así que el BFF y el frontend no cambian por la proyección. EP3-05 suma `folio` y EP3-06 suma `slaBusinessDays`.
 
 | Campo | Vecino (sus trámites) | Funcionario y Admin | Auditor |
 |---|---|---|---|
@@ -2198,6 +2202,8 @@ requests deja de serializar la entidad `MunicipalRequest` y responde con `Reques
 | `solicitanteEmail` | Sí | Sí | `null` |
 | `hasAssignee` | Sí | Sí | Sí |
 | `assigneeId` y `assigneeName` | `null` | Sí | Sí |
+| `folio` (EP3-05) | Sí | Sí | Sí |
+| `slaBusinessDays` (EP3-06) | Sí | Sí | Sí |
 
 **El Auditor sin correo del solicitante:** fiscaliza quién hizo qué y con qué fundamento, y no contacta vecinos. Ocultar el correo aplica la proporcionalidad de la Ley 21.719, igual que EP3-01, sección 8. Se devuelve `null` en vez de enmascararlo, para no dejar datos parciales.
 
@@ -2293,7 +2299,7 @@ El Admin ve `/audit`, que registra sus propias acciones, y eso no debilita la se
 
 1. **Ingreso asistido:** un funcionario de ventanilla u OIRS no puede ingresar un trámite a nombre de un vecino que llega en persona, aunque la Ley 19.880 lo contempla. Exige separar al solicitante del actor y capturar sus datos de contacto. Es un cambio de modelo en requests.
 2. **Sin segmentación por unidad:** Entra ID entrega el rol, no la oficina ni el sector del funcionario. Todos los funcionarios ven todos los trámites de la comuna. Mejora futura: un grupo de Entra ID o un atributo por unidad.
-3. **Plazo para el Vecino:** no se le muestra la fecha comprometida. La fecha límite la calcula report (EP3-06), no requests. Se reevalúa en EP3-06.
+3. **Plazo para el Vecino** (actualizado por EP3-06): ve el plazo en días hábiles (`slaBusinessDays`), no la fecha límite ni el estado del plazo, que calcula report. Mejora futura: mostrarle `dueDate` (EP3-06, límite 6).
 4. **Evidencia de resolución:** el Funcionario no adjunta una foto del trabajo terminado.
 5. **Colaboración entre funcionarios:** otro Funcionario no puede registrar una gestión en un trámite ajeno. El responsable reasigna, o el Admin interviene.
 6. **Abstención (artículo 12 de la Ley 19.880):** la plataforma no detecta conflictos de interés. Con un rol por usuario, un Funcionario o un Admin no puede ser solicitante al crear, y el único caso posible es que el rol de un usuario cambie en Entra ID después de ingresar un trámite. Las causales de abstención dependen de la declaración del funcionario.
@@ -2541,6 +2547,299 @@ Solo para staff. El Vecino que lo usa recibe 403 `El filtro assignee es solo par
 3. **Devolver a la bandeja** (por plazo): nadie puede soltar un trámite. Mejora futura: "devolver a la bandeja" con motivo, con un evento `request.unassigned` y una revisión del hito público.
 4. **Tope de 999.999 trámites por año** (por diseño): una comuna no llega a esa cifra. Ampliarlo cambia el formato.
 5. **Altas en fila** (por diseño): el bloqueo de `folio_counter` las procesa una tras otra.
+
+## Contrato: plazos en días hábiles (EP3-06)
+
+Define el plazo de atención por tipo de trámite, cómo se cuenta en días hábiles, de dónde salen los feriados, los estados del plazo y cómo los calcula report. Es la base de EP3-24 (catalog), EP3-25 (BFF), EP3-31 (requests), EP3-36 y EP3-38 (report), EP3-46 y EP3-53 (frontend).
+
+**Base legal, como fundamento de diseño:** la Ley 19.880 fija que los plazos de días son de días hábiles, y que los sábados, domingos y festivos son inhábiles (art. 25). El mismo artículo dice que los plazos se cuentan desde el día siguiente, y que una presentación electrónica en día inhábil se entiende hecha en la primera hora del primer día hábil siguiente. El art. 27 limita la duración de un procedimiento a seis meses. Este contrato aplica esas reglas por analogía al plazo de atención. No es una interpretación legal.
+
+**Nombres:** los campos, columnas y propiedades van en inglés (convención 13 del backlog). Los valores de los enums de dominio van en español, como `RequestStatus` y `ActivityKind`.
+
+### 1. Plazo por tipo y snapshot
+
+#### 1.1 `slaBusinessDays` en catalog
+
+| Regla | Valor |
+|---|---|
+| Rango | Entero de 1 a 120 días hábiles. El tope se ancla en el art. 27: seis meses son unos 120 a 125 días hábiles, y ningún plazo de atención debería superar la duración máxima de un procedimiento. Además evita errores de tipeo |
+| `null` | Sin plazo, igual que `dailyQuota` en EP1.5-03. Un tipo nuevo, y los tipos existentes, quedan sin plazo hasta que el Admin lo defina |
+| `POST` | Opcional, `null` si se omite |
+| `PUT` | Reemplaza el valor completo, como el cupo: si el body no trae `slaBusinessDays`, el tipo pasa a sin plazo. El frontend envía siempre el campo. Una sola regla para todo el body es más fácil de seguir que dos |
+| Quién lo edita | Solo el Admin. El orden de validación es el de catalog: 403, 400, 404. También vale para un body ilegible (sección 1.2) |
+| Fuera de rango | 400 `El plazo debe ser un entero entre 1 y 120 dias habiles` |
+| Auditoría | Cada cambio queda en `procedure-type.updated`, con `slaBusinessDays` en `before` y `after` (EP3-01, sección 7) |
+
+#### 1.2 Lectura estricta del body en catalog
+
+Jackson acepta por defecto `5.7` como 5 y `"5"` como 5. Para que un decimal o un string respondan 400, catalog configura:
+
+```yaml
+spring:
+  jackson:
+    deserialization:
+      accept-float-as-int: false
+    mapper:
+      allow-coercion-of-scalars: false
+```
+
+1. **Aplica a todo catalog.** También endurece `dailyQuota` y `active`, que dejan de aceptar `"5"` y `"true"`. Cambia lo que aceptan EP1.5-02 y EP1.5-03, que llevan una nota fechada. El frontend ya envía números y booleanos (`<input type="number">` con un control `number | null`), el BFF reenvía el body como `Map<String, Object>` sin cambiar los tipos, y ningún test de catalog envía esos campos como string.
+2. **Cubre números y booleanos, no texto.** `allow-coercion-of-scalars` no afecta a los campos de texto: un `label` enviado como número se sigue aceptando como texto.
+3. **El 400 se arma según el campo.** `CatalogExceptionHandler` agrega un `@ExceptionHandler(HttpMessageNotReadableException.class)`, lee la ruta del campo desde la causa (`MismatchedInputException.getPath()`) y responde con el cuerpo de error de catalog (`status`, `error`, `message`):
+
+| Campo | `message` |
+|---|---|
+| `slaBusinessDays` | `El plazo debe ser un entero entre 1 y 120 dias habiles` |
+| `dailyQuota` | `El cupo diario debe ser un entero` |
+| Cualquier otro campo, o un JSON roto | `El cuerpo de la solicitud no es valido` |
+
+4. **El rol se revisa antes que el body.** Spring lee el body antes de que `CatalogService` compruebe el rol, así que un error de lectura llegaría antes que el 403. Para mantener el orden 403, 400, 404, el manejador revisa `X-User-Roles` con `AdminCaller.isAdmin` antes de armar el 400: si quien llama no es Admin, responde el mismo 403 que el servicio (`Solo Admin puede crear tipos de tramite` en `POST` y `Solo Admin puede editar tipos de tramite` en `PUT`).
+
+#### 1.3 Snapshot en el alta
+
+1. El BFF toma `slaBusinessDays` del tipo que ya valida `ProcedureTypeValidator` y lo reenvía en `X-Procedure-Sla-Days`, igual que `X-Procedure-Label`. Si el tipo no tiene plazo, el header no se envía (EP3-25).
+2. requests lo guarda en el trámite, lo incluye en `request.created` y lo expone en `RequestView` para los cuatro roles (EP3-31). EP3-29 no lo expone porque la columna todavía no existe.
+3. **Editar el plazo del tipo no afecta a los trámites ya ingresados.** report calcula con el snapshot del alta. El plazo del tipo es una política de la municipalidad, y no se le cambia al vecino un compromiso ya informado.
+
+### 2. Cómo se cuenta el plazo
+
+#### 2.1 Desde cuándo corre
+
+El plazo corre **desde el alta**, no desde la admisión:
+- es el compromiso con el vecino, que espera desde que ingresó su solicitud;
+- evita un incentivo perverso: con la admisión como inicio, demorarla detendría el reloj, y la espera por cupo agotado no contaría.
+
+El **inicio** depende de un solo evento, `request.created`. Para detener el plazo, report usa además `request.status-changed`, ordenado por `sequence` (EP3-02, sección 9.3).
+
+#### 2.2 Reglas de conteo
+
+1. **El día del alta se calcula en `America/Santiago`**, desde el `occurredAt` de `request.created`. Un alta del viernes a las 22:00 en Chile ya es sábado en UTC: sin la conversión caería en un día inhábil por error. Es la misma regla del año del folio (EP3-05, sección 1.1), y `occurredAt` es el mismo instante que `created_at`.
+2. **Un alta en día inhábil se entiende hecha el primer día hábil siguiente** (art. 25).
+3. **El conteo parte el día hábil siguiente** al día del alta, o al día en que se entiende hecha.
+4. **`dueDate` es el día hábil número N** del conteo, con N = `slaBusinessDays`. Es una fecha (`LocalDate`) en `America/Santiago`, no un instante. Como solo se cuentan días hábiles, `dueDate` siempre es hábil, y la prórroga del art. 25 cuando el último día es inhábil ocurre sola.
+5. **Las reglas 2 y 3 usan el mismo calendario** de la sección 3. Nadie implementa "inhábil = sábado o domingo" en una parte y con feriados en la otra.
+6. **Sin pausas.** El plazo corre en todos los estados abiertos y se detiene en `RESUELTO` o `RECHAZADO`.
+7. **Se mide con la hora del hecho**, el `occurredAt`, no con la llegada a Kafka (EP3-01, sección 4). Un evento atrasado por el outbox no mueve el plazo.
+
+Ejemplos, con un plazo de 5 días y sin feriados en esa semana:
+
+| Alta | Día 1 | `dueDate` |
+|---|---|---|
+| Viernes 6-nov-2026, 10:00 | Lunes 9-nov | Viernes 13-nov |
+| Sábado 7-nov-2026 (se entiende hecha el lunes 9) | Martes 10-nov | Lunes 16-nov |
+
+#### 2.3 Cierre
+
+Un trámite cerrado se evalúa por fecha, con la misma regla:
+- **`CUMPLIDO`:** la fecha del `occurredAt` del cambio a `RESUELTO` o `RECHAZADO`, en `America/Santiago`, es igual o anterior a `dueDate`;
+- **`FUERA_DE_PLAZO`:** es posterior.
+
+Un trámite sin plazo no es ni cumplido ni fuera de plazo.
+
+### 3. Calendario de feriados
+
+#### 3.1 Fuente
+
+Solo report calcula plazos, así que el calendario vive solo en report. requests y el frontend no lo necesitan: el frontend muestra lo que calcula report.
+
+**Archivo versionado `holidays-cl.yml` en report**, cargado con `@ConfigurationProperties`. Es determinista, se prueba sin red, y la EC2 no depende de un tercero. Se descartaron una API externa (el cálculo fallaría si no responde) y una tabla editable por el Admin (suma endpoint, pantalla y auditoría, fuera de la prioridad Alta).
+
+1. **Contenido:** los feriados nacionales de 2026 y 2027, por fecha y con su nombre.
+2. **Fuente oficial:** las fechas se toman del texto legal (BCN o Diario Oficial), no de memoria ni de sitios agregadores, porque varios feriados se trasladan según el año. El archivo cita la fuente y la fecha en que se verificó.
+3. **El 31 de diciembre no se incluye.** Es feriado bancario, no feriado legal, y no hace inhábil el día para la administración.
+4. **Feriados regionales:** solo los que aplican a la comuna del proyecto, Alto Biobío (Región del Biobío), que es la que valida `LocationRules`. Los feriados regionales vigentes (7 de junio en Arica y Parinacota, y 20 de agosto en Chillán y Chillán Viejo) no le aplican, así que el archivo no tiene feriados regionales. Se confirma con la fuente oficial al cargar el archivo. El Día Nacional de los Pueblos Indígenas es nacional y va incluido.
+
+#### 3.2 Años sin calendario
+
+El cálculo depende de **todos los años que cruza el conteo**, no solo del año del alta. Con un tope de 120 días hábiles, un conteo puede pasar al año siguiente.
+
+Si el calendario no cubre algún año del conteo:
+1. ese tramo se calcula solo con sábados y domingos. Es conservador: la fecha sale igual o más temprana que la correcta, así que el aviso nunca llega tarde;
+2. report registra `WARN calendario-feriados-incompleto year=2028`;
+3. el health de report lo muestra en un componente informativo, como el componente `outbox` de requests, sin cambiar su estado `UP`. Report no falla al arrancar por un archivo desactualizado, porque la reportería no es el core.
+
+#### 3.3 Recálculo al arrancar
+
+El archivo solo cambia con un redeploy de report. Al arrancar, report **recalcula `dueDate` y `dueSoonDate` de los trámites abiertos** con el calendario cargado:
+- aplica un feriado nuevo, que por el art. 25 es inhábil aunque se haya declarado después del alta;
+- corrige los tramos calculados solo con fines de semana mientras faltaba un año.
+
+**Por qué no se congela la fecha:** el plazo por tipo es una política (sección 1.3), pero un feriado es un hecho legal. Una fecha congelada que no lo descuenta queda mal según la misma norma que usa el contrato.
+
+Los trámites **cerrados** no se recalculan: su `CUMPLIDO` o `FUERA_DE_PLAZO` ya se evaluó. El recálculo tampoco toca los trámites sin plazo: trabaja sobre el snapshot de `slaBusinessDays`, nunca sobre el plazo actual del tipo en catalog. Tampoco toca las proyecciones parciales, que no tienen fecha de alta desde donde contar (sección 5.2).
+
+### 4. Estados del plazo
+
+#### 4.1 `slaStatus`
+
+Un solo campo para todo el ciclo de vida:
+
+| Situación | `slaStatus` | Texto en pantalla | Condición, con D = fecha actual en `America/Santiago` |
+|---|---|---|---|
+| Abierto | `DENTRO_DE_PLAZO` | "Dentro de plazo" | D es anterior a `dueSoonDate` |
+| Abierto | `POR_VENCER` | "Por vencer" | D es igual o posterior a `dueSoonDate`, e igual o anterior a `dueDate` |
+| Abierto | `VENCIDO` | "Vencido" | D es posterior a `dueDate` |
+| Cerrado | `CUMPLIDO` | "Cumplido" | Sección 2.3 |
+| Cerrado | `FUERA_DE_PLAZO` | "Fuera de plazo" | Sección 2.3 |
+| Sin plazo | `SIN_PLAZO` | "Sin plazo" | `slaBusinessDays` nulo, abierto o cerrado |
+
+Una proyección parcial (sección 6.1) tiene `sla_status` en `null`, que significa "sin dato", distinto de `SIN_PLAZO`. EP3-07 define cómo se muestra en la API.
+
+#### 4.2 Umbral de "por vencer"
+
+El umbral es fijo: **2 días hábiles o menos**, contando D si es hábil y `dueDate`. Queda en configuración, `barriodigital.sla.due-soon-business-days: 2`, y el contrato fija el 2.
+
+- **Por qué fijo:** es fácil de explicar en pantalla y da un día hábil completo de aviso antes del último. Un umbral proporcional, por ejemplo el 20 %, avisaría con 24 días de anticipación en un plazo de 120, y dejaría de ser una alerta.
+- **Plazos cortos:** con `slaBusinessDays = 1`, el trámite nace `POR_VENCER`. Si entra el lunes, vence el martes, y ese mismo lunes quedan 2 días hábiles. Es correcto: ese plazo es urgente por definición.
+
+#### 4.3 `dueSoonDate`
+
+Para que el cálculo diario solo compare fechas, report guarda también `dueSoonDate`, la fecha en que el trámite pasa a `POR_VENCER`:
+
+> `dueSoonDate` es el día siguiente al día hábil número (N + 1) contado hacia atrás desde `dueDate`, donde `dueDate` es el día 1 y N es `due-soon-business-days`.
+
+Con N = 2: si `dueDate` es viernes, los días 1, 2 y 3 son viernes, jueves y miércoles, y `dueSoonDate` es el jueves. Si `dueDate` es martes, son martes, lunes y viernes, y `dueSoonDate` es el sábado; el funcionario ve el aviso el lunes.
+
+`dueDate` y `dueSoonDate` se calculan juntos, y es el único lugar donde se usa el calendario.
+
+#### 4.4 Nombres en report
+
+| Campo | Columna | Contenido |
+|---|---|---|
+| `createdAt` | `created_at` | `occurredAt` de `request.created`. Nulo en una proyección parcial |
+| `slaBusinessDays` | `sla_business_days` | Snapshot del plazo, tomado de `request.created`. Es la base del recálculo |
+| `dueDate` | `due_date` | Sección 2.2 |
+| `dueSoonDate` | `due_soon_date` | Sección 4.3 |
+| `closedAt` | `closed_at` | `occurredAt` del cambio a `RESUELTO` o `RECHAZADO` |
+| `slaStatus` | `sla_status` | Sección 4.1 |
+
+### 5. Cálculo y concurrencia
+
+#### 5.1 Cuándo se calcula
+
+| Momento | Qué hace |
+|---|---|
+| Al proyectar `request.created` | Con plazo: calcula `dueDate`, `dueSoonDate` y `slaStatus`. Sin plazo: `SIN_PLAZO` |
+| Al proyectar un cierre | Escribe `closedAt`. Si el trámite tiene `dueDate`, escribe `CUMPLIDO` o `FUERA_DE_PLAZO`. Un trámite `SIN_PLAZO` sigue en `SIN_PLAZO`, y una proyección parcial sigue con `sla_status` nulo |
+| Al arrancar | Recálculo de la sección 3.3, después el `UPDATE` de estado, y recién entonces se inicia el listener |
+| Todos los días a las 00:05 en `America/Santiago` | El `UPDATE` de estado |
+
+Cumple K8: los vencimientos se calculan con un `@Scheduled`, sin evento adicional, y la API de report lee proyecciones ya materializadas.
+
+**El `UPDATE` de estado** es una sola sentencia sobre el conjunto, sin calendario, que cubre los tres estados abiertos y es excluyente por construcción:
+
+```sql
+UPDATE report_request_projection
+SET sla_status = CASE
+    WHEN due_date < :hoy       THEN 'VENCIDO'
+    WHEN due_soon_date <= :hoy THEN 'POR_VENCER'
+    ELSE 'DENTRO_DE_PLAZO'
+  END
+WHERE closed_at IS NULL AND due_date IS NOT NULL
+```
+
+- `:hoy` es la fecha actual en `America/Santiago`. El nombre de la tabla es ilustrativo: lo fija EP3-36.
+- **Mueve los estados en las dos direcciones.** Si el recálculo posterga `dueDate` a una fecha más tardía, por un feriado nuevo o por un año que faltaba, un trámite `VENCIDO` puede volver a `POR_VENCER` o a `DENTRO_DE_PLAZO`, y uno `POR_VENCER` puede volver a `DENTRO_DE_PLAZO`. Con una sentencia por estado, ninguna condición lo devolvería.
+- `due_date IS NOT NULL` deja fuera, de forma explícita, a los trámites sin plazo y a las proyecciones parciales.
+
+**Horario de verano:** en septiembre, Chile adelanta el reloj de las 24:00 del sábado a la 01:00 del domingo, y ese domingo no existen las 00:05. No afecta, porque ningún estado cambia en domingo: un estado solo cambia en un día cuyo día anterior fue hábil, y `VENCIDO` empieza el día siguiente a una `dueDate`, que siempre es hábil. No hace falta una segunda ejecución.
+
+#### 5.2 Escrituras sin pérdidas
+
+Tres procesos escriben la misma proyección: el listener, el recálculo al arrancar y el job diario. La regla es: **el listener bloquea la fila, y los procesos derivados escriben solo sus columnas.**
+
+1. **El listener lee la proyección con `PESSIMISTIC_WRITE`** (`findByIdForUpdate`), dentro de su transacción. Al proyectar un cierre lee `dueDate` para evaluar el resultado, y solo el bloqueo protege esa lectura: si el recálculo llegó primero, el listener espera y lee la fila corregida; si el listener llegó primero, el recálculo espera. `@DynamicUpdate` no alcanza, porque no protege la lectura.
+2. **El recálculo al arrancar** recorre los trámites abiertos con `created_at` y `sla_business_days` no nulos. Así deja fuera a los trámites sin plazo y a las proyecciones parciales, que no tienen desde dónde contar. Escribe con un `UPDATE` acotado por trámite (`@Modifying`), que solo toca `due_date` y `due_soon_date`, con `WHERE id = :id AND closed_at IS NULL`. Va un `UPDATE` por trámite porque contar días hábiles necesita el calendario en Java.
+3. **El job diario** escribe con el `UPDATE` de estado sobre el conjunto de la sección 5.1.
+4. **Ningún proceso derivado lee la fila, la modifica en Java y la guarda completa.** En Oracle, un `UPDATE` que encuentra la fila cambiada por otra transacción vuelve a evaluar el `WHERE`: un trámite cerrado entremedio ya no cumple `closed_at IS NULL` y no se toca.
+5. **El listener parte con `autoStartup=false`** y se inicia al terminar el recálculo y el `UPDATE` de estado. Ordena el arranque. Lo que garantiza la corrección son las reglas 1 a 4.
+6. **Dos instancias** (la prueba de balanceo de EP3-36) corren las dos el recálculo y el job. No hace falta un bloqueo distribuido: el recálculo y el `UPDATE` de estado dan el mismo resultado si corren dos veces, y el bloqueo del listener cubre el recálculo de una instancia contra el listener de la otra.
+
+#### 5.3 Deadlocks
+
+Además de la proyección, `KpiService` actualiza filas de conteo compartidas entre los tres hilos del listener (EP3-36). Para que no se forme un ciclo:
+1. **Orden fijo:** primero la proyección y después los conteos, siempre en el mismo orden por clave.
+2. **El deadlock es recuperable.** Oracle cancela una de las sentencias (`ORA-00060`), y Spring lo traduce a una subclase de `PessimisticLockingFailureException`. `DefaultErrorHandler` reintenta todo lo que no se registró como no recuperable, así que esa excepción **no** se registra como no recuperable.
+
+Contra el job y el recálculo no hay ciclo: solo tocan proyecciones, y el listener no espera ninguna fila que ellos tengan. Calcular "estados activos" con un `COUNT` sobre las proyecciones, sin contadores compartidos, es una alternativa que puede decidir EP3-07 o EP3-36.
+
+### 6. Trámites sin plazo y trámites anteriores al outbox
+
+#### 6.1 Trámites anteriores al outbox
+
+report solo conoce un trámite por sus eventos, y `request.created` se registra en el outbox recién desde EP3-31. **report parte desde el despliegue:** los KPIs y los plazos cubren los trámites creados desde EP3-31, y la demo usa trámites nuevos. Se descartó un backfill de eventos sintéticos: es una issue en sí misma, toca la cadena crítica, y audit guardaría como reales eventos con un actor y una IP que no existieron.
+
+Los trámites antiguos siguen vivos, y sus cambios posteriores sí publican eventos. Para eso, y para el `request.created` que se reprocesa desde la DLT, vale la regla de la **proyección parcial**:
+
+1. Un evento de un trámite sin proyección **crea una proyección parcial** con lo que trae (estado actual, responsable, `sequence` y `folio`), sin datos de creación (`createdAt` nulo) y con `sla_status` nulo. No va a la DLT.
+2. **Una proyección parcial no cuenta** en ningún KPI ni en los plazos.
+3. **Si después llega el `request.created`** y el trámite sigue abierto, completa los datos de creación (`createdAt` y `slaBusinessDays`) y calcula `dueDate`, `dueSoonDate` y `slaStatus`, o `SIN_PLAZO` si no tiene plazo. No cambia el estado del trámite, porque su `sequence` es menor (EP3-02, sección 9.3). Desde ahí el trámite cuenta.
+4. **Si la proyección parcial ya estaba cerrada** cuando llega el `created`, completa los mismos datos y evalúa de inmediato `CUMPLIDO` o `FUERA_DE_PLAZO` con la fecha de cierre ya guardada, o `SIN_PLAZO` si no tiene plazo.
+5. **Un trámite antiguo nunca recibe su `created`,** así que queda parcial y fuera de los KPIs.
+
+#### 6.2 Trámites sin plazo
+
+Son los de tipos sin plazo y los creados antes de que el BFF reenvíe `X-Procedure-Sla-Days` (EP3-25):
+
+1. **Se proyectan** con `dueDate` y `dueSoonDate` en `null` y `slaStatus` en `SIN_PLAZO`.
+2. **No aparecen** en los listados de vencidos ni de por vencer, y el job no los toca.
+3. **No cuentan en el cumplimiento:** el porcentaje se calcula con `CUMPLIDO` sobre `CUMPLIDO + FUERA_DE_PLAZO`.
+4. **Definir un plazo después no les afecta**, por el snapshot. El recálculo al arrancar tampoco les calcula fechas.
+5. **En pantalla**, el staff ve "Sin plazo" como texto neutro, no un estado vacío, para que no se confunda con un error de carga.
+
+### 7. Qué ve cada rol
+
+| Rol | Qué ve | Dónde |
+|---|---|---|
+| Vecino | El plazo en días, si el trámite tiene. No ve `dueDate` ni `slaStatus` | Detalle (EP3-46), con `slaBusinessDays` de `RequestView` |
+| Funcionario, Admin y Auditor | `slaStatus`, `dueDate` y el plazo en días | Listado, detalle e `/inicio` (EP3-53, EP3-52) |
+
+**Texto para el Vecino**, como plantilla:
+
+> Plazo de atención: {slaBusinessDays} días hábiles, contados desde el día hábil siguiente al ingreso. Si ingresaste en sábado, domingo o festivo, el ingreso se considera hecho el día hábil siguiente.
+
+- Con `slaBusinessDays = 1` va en singular: "1 día hábil".
+- La segunda frase puede ir como texto secundario o en un tooltip.
+- Si `slaBusinessDays` es `null`, el detalle no muestra el bloque.
+
+La fila "Ver el estado del plazo" de la matriz de EP3-04 sigue en No para el Vecino: ve el compromiso en días, no el estado. Por eso se actualiza EP3-04, sección 6.1 (`slaBusinessDays` para los cuatro roles) y el límite 3.
+
+### 8. Cambios en otros contratos
+
+| Contrato | Cambio |
+|---|---|
+| EP1.5-02, sección 3 | Nota fechada: lectura estricta del body de catalog |
+| EP1.5-03, sección 2 | Línea que remite a esa nota para `dailyQuota` |
+| EP3-01, sección 6 | Los ejemplos de `request.created` y `request.status-changed` usan `sector: "ralco"` y un punto dentro de la caja de `LocationRules`. Antes usaban `Centro` y coordenadas de Viña del Mar, que el propio sistema rechaza con 400 |
+| EP3-04, sección 6.1 | `folio` y `slaBusinessDays` visibles para los cuatro roles, y la nota de los campos que suma `RequestView` |
+| EP3-04, límite 3 | Reescrito: el Vecino ve el plazo en días |
+
+### 9. Cambios por capa
+
+| Capa | Cambio | Issue |
+|---|---|---|
+| **catalog** | Columna `sla_business_days` nullable, `slaBusinessDays` en `ProcedureView`, POST y PUT con la sección 1.1. Lectura estricta y manejador de `HttpMessageNotReadableException` de la sección 1.2 | EP3-24 |
+| **BFF** | `X-Procedure-Sla-Days` en el alta, sin header si no hay plazo | EP3-25 |
+| **requests** | Columna del snapshot, `slaBusinessDays` en `request.created` y en `RequestView` | EP3-31 |
+| **report**, consumidor | Proyección con `closedAt`, bloqueo de la proyección, orden fijo de filas y proyección parcial | EP3-36 |
+| **report**, plazos | Cálculo de `dueDate`, `dueSoonDate` y `slaStatus` al proyectar el alta y el cierre, `holidays-cl.yml`, recálculo al arrancar, `UPDATE` de estado al arrancar y a las 00:05, health del calendario y endpoint de plazos | EP3-38 |
+| **frontend** | `slaStatus` con su texto en listado, detalle e `/inicio`. Plazo en días para el Vecino. Edición de `slaBusinessDays` por el Admin | EP3-46, EP3-52, EP3-53 |
+
+**Tests que pide este contrato**, además de los de cada ficha:
+- recálculo al arrancar: un trámite abierto calculado sin un feriado queda corregido;
+- un trámite `VENCIDO` vuelve a `DENTRO_DE_PLAZO` cuando el recálculo posterga su `dueDate`;
+- el job y el recálculo no tocan trámites sin plazo ni proyecciones parciales;
+- proyección parcial completada por un `created` posterior, abierta y cerrada;
+- lectura estricta en catalog: `"5"` y `5.7` responden 400 con su mensaje, y 403 si quien llama no es Admin.
+
+### 10. Límites conocidos
+
+1. **Trámites anteriores a EP3-31** (por plazo): no aparecen en los KPIs ni en los plazos, tampoco en "estados activos", aunque sigan abiertos. El timeline de audit de esos trámites empieza en el despliegue. Mejora futura: un backfill con eventos marcados como reconstruidos.
+2. **Un feriado nuevo se aplica después del redeploy de report** (por diseño).
+3. **Un trámite cerrado mientras faltaba un año en el calendario** conserva su evaluación, aunque se haya hecho solo con fines de semana (por diseño, para no reescribir resultados ya informados).
+4. **Sin pausas** (por diseño): si el trámite espera una respuesta del vecino, por ejemplo una gestión con resultado `NO_CONTESTA`, el plazo sigue corriendo. Mejora futura: suspensión con motivo.
+5. **Entre las 00:00 y las 00:05**, un trámite que acaba de vencer se ve con el estado del día anterior.
+6. **El Vecino ve el plazo en días, no la fecha** (por plazo). Mejora futura: que el BFF obtenga el trámite de requests, que controla la propiedad, y después la `dueDate` de report por `requestId`.
 
 ## Limitaciones conocidas (no bloqueantes)
 
