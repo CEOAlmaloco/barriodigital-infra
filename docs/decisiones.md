@@ -349,9 +349,9 @@ Todos los mensajes usan el mismo sobre. `type` dice qué evento es. `eventId` id
 | `correlationId` | string | id del trámite |
 | `payload` | objeto | datos del caso. No repite el `type` |
 
-`payload` lleva `requestId`, `procedureType`, `procedureLabel`, `address` y `solicitanteEmail`. `solicitanteEmail` puede venir `null` en trámites antiguos.
+`payload` lleva `requestId`, `procedureType`, `procedureLabel`, `address` y `solicitanteEmail`. `solicitanteEmail` puede venir `null` en trámites antiguos. `crew.ticket` necesita `address`. Los emails necesitan `solicitanteEmail`.
 
-**Actualización (EP3-05, 5-nov-2026):** `payload` agrega `folio` (`BD-AAAA-NNNNNN`). Puede venir `null` en mensajes publicados antes de EP3-28. Es un cambio compatible: los consumidores de notify ignoran los campos que no usan. `crew.ticket` necesita `address`. Los emails necesitan `solicitanteEmail`.
+**Actualización (EP3-05, 5-nov-2026):** `payload` agrega `folio` (`BD-AAAA-NNNNNN`). Puede venir `null` en mensajes publicados antes de EP3-28. Es un cambio compatible: los consumidores de notify ignoran los campos que no usan.
 
 ### 3. Ejemplos
 
@@ -2464,7 +2464,7 @@ requests guarda un registro propio, la tabla `staff_member`:
 | `role` | El único rol de `X-User-Roles`, el último visto |
 | `first_seen_at`, `last_seen_at` | Instantes de la primera y la última llamada registrada |
 
-1. **Se actualiza en cada llamada de staff** (Funcionario, Admin o Auditor) a requests, con los headers que reenvía el BFF después de validar el JWT. Un caché en memoria limita la escritura a una vez cada 15 minutos por `oid`. Si cambia el rol o el nombre en Entra ID, la fila se actualiza en la siguiente llamada.
+1. **Se actualiza en cada llamada de staff** (Funcionario, Admin o Auditor) a requests, con los headers que reenvía el BFF después de validar el JWT. Solo cuenta una llamada a `/api/**` con `X-User-Id` y con **exactamente un** rol de staff en `X-User-Roles`: sin rol, con más de uno o con `Vecino` no se registra, porque esa llamada termina en 403 o no es de staff. Un caché en memoria limita la escritura a una vez cada 15 minutos por `oid`. Si cambia el rol o el nombre en Entra ID, la fila se actualiza en la siguiente llamada.
 2. **El Vecino no se registra.** La tabla es solo de staff, por minimización de datos (Ley 21.719).
 3. **Un fallo del registro no bloquea la llamada.** El upsert corre **antes** del caso de uso, en un `HandlerInterceptor`, con una transacción propia en `StaffMemberService.touch`, que no captura excepciones. El interceptor captura el error, lo registra en el log y deja seguir la llamada. Si el upsert corriera dentro de la transacción del caso de uso, una violación de PK en el primer acceso simultáneo del mismo `oid` la dejaría *rollback-only*, como en el folio (sección 1.3). Ante esa violación, `touch` no reintenta: la fila ya existe y la próxima llamada la actualiza.
 4. **El Funcionario aparece desde su primera llamada a requests.**
