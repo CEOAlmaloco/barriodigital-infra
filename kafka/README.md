@@ -87,12 +87,15 @@ miembros y el tópico se eliminó.
 
 ```bash
 docker scout cves --format sarif confluentinc/cp-zookeeper:7.9.10 \
-  > ../docs/evidencias/kafka-confluentinc_cp-zookeeper_7.9.10.sarif
+  | gzip > ../docs/evidencias/kafka-confluentinc_cp-zookeeper_7.9.10.sarif.gz
 docker scout cves --format sarif confluentinc/cp-kafka:7.9.10 \
-  > ../docs/evidencias/kafka-confluentinc_cp-kafka_7.9.10.sarif
+  | gzip > ../docs/evidencias/kafka-confluentinc_cp-kafka_7.9.10.sarif.gz
 docker scout cves --format sarif kafbat/kafka-ui:v1.5.0 \
-  > ../docs/evidencias/kafka-kafbat_kafka-ui_v1.5.0.sarif
+  | gzip > ../docs/evidencias/kafka-kafbat_kafka-ui_v1.5.0.sarif.gz
 ```
+
+Los `.sarif.gz` se descomprimen con `gunzip -c archivo.sarif.gz` (~4.4 MB
+each).
 
 Los tres tags son el último parche disponible (cp-kafka/cp-zookeeper `7.9.10`
 dentro de la línea 7.x exigida; kafka-ui `v1.5.0`). Aun así quedan CVEs HIGH
@@ -100,6 +103,87 @@ con corrección disponible en dependencias transitivas de las imágenes
 ( Spring/Jackson/Netty y paquetes RPM de base); no hay tag 7.x más nuevo que
 los resuelva, por lo que quedan registrados en los SARIF como riesgo
 conocido a reevaluar al subir a Confluent 8.x.
+
+## Despliegue en EC2 (`ec2-kafka`, EP3-15)
+
+`compose.ec2.yml` es la variante para la instancia dedicada (t3.medium; t3.large
+si el Learner Lab lo permite). Misma topología 3+3+UI, con límites más
+ajustados: brokers `mem_limit 768m` / heap 448m, Zookeeper `384m` / 256m, UI
+`640m` / 448m.
+
+**Sesión 2026-11-10 (Learner Lab):** instancia `ec2-kafka` = **t3.large**
+`i-0cca16eed64db7f8e`, IP privada `172.31.0.172`, SG `barriodigital-ec2-kafka`.
+7/7 healthy, swap 2G, memoria ~23 % con produce/consume, sin OOM. Evidencias en
+`docs/evidencias/EP3-15-ec2-kafka.md` (+ `ec2-kafka-*.txt|json` y captura UI).
+
+### Preparación de la instancia
+
+```bash
+# Swap de 2 GB persistente (una sola vez)
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+```bash
+# Layout plano ~/barriodigital/kafka/ con compose.yml -> compose.ec2.yml
+# y kafka/.env con:
+#   KAFKA_HOST_IP=<IP_PRIVADA_EC2_KAFKA>
+#   KAFKA_BIND_ADDRESS=0.0.0.0
+#   KAFKA_UI_BIND_ADDRESS=0.0.0.0
+#   KAFKA_UI_USER / KAFKA_UI_PASSWORD (login de la UI)
+docker compose -f compose.ec2.yml --env-file .env up -d --wait
+docker compose -f compose.ec2.yml ps    # 7 contenedores healthy
+```
+
+### Security Group de `ec2-kafka`
+
+| Puerto | Regla |
+|---|---|
+| 9092, 9093, 9094 | TCP solo desde el security group de `ec2-apps` |
+| 8090 (Kafka UI) | TCP solo desde la IP `/32` del equipo del equipo de desarrollo |
+| 2181 (Zookeeper) | sin regla: no se publica |
+| 22 | SSH desde la IP `/32` del equipo (acceso al lab) |
+
+`KAFKA_HOST_IP` debe ser la **IP privada** de la instancia: es la que
+anuncian los brokers en EXTERNAL y la que usan los servicios de `ec2-apps`
+(misma VPC). La UI se alcanza por la IP pública del lab o por túnel SSH
+(`ssh -L 8090:localhost:8090 ec2-user@<ip-publica>`).
+
+### Memoria (t3.medium ≈ 4 GiB)
+
+Medir con el flujo completo corriendo (productor + consumidor + UI):
+
+```bash
+docker stats --no-stream
+free -m
+```
+
+Criterio: uso estable < 85 % y ningún contenedor `OOMKilled`
+(`docker inspect <c> --format '{{.State.OOMKilled}}'`).
+
+- **Plan A (actual):** límites de arriba; heaps suman ~2.6 GB.
+- **Plan B (si no cumple):** subir a t3.large, o bajar heap de brokers a
+  `-Xmx384M` / `mem_limit 640m` y rehacer la medición. Documentar el resultado
+  en `docs/evidencias/`.
+
+### Recreación del lab (cambio de IP privada)
+
+Si el Learner Lab reasigna la IP privada de `ec2-kafka`:
+
+1. Obtener la nueva IP: `aws ec2 describe-instances` o consola → instancia.
+2. Actualizar `KAFKA_HOST_IP` en `~/barriodigital/kafka/.env` y recrear:
+   `docker compose -f compose.ec2.yml --env-file .env up -d` (los brokers
+   anuncian la IP nueva; sin esto los clientes de apps no conectan).
+3. Variables afectadas en otros lados: `KAFKA_BOOTSTRAP_SERVERS` de
+   kafka-admin y de cualquier productor/consumidor en `ec2-apps`
+   (`<nueva-ip>:9092,<nueva-ip>:9093,<nueva-ip>:9094`).
+4. Checklist de reapertura: SG con las reglas de la tabla (la IP `/32` del
+   equipo puede cambiar entre sesiones del lab: verificarla), swap presente
+   (`swapon --show`), 7 contenedores healthy, `docker stats`/`free -m`
+   dentro del criterio, evidencias actualizadas.
 
 ## Troubleshooting
 

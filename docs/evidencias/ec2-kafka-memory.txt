@@ -1,0 +1,15 @@
+﻿               total        used        free      shared  buff/cache   available
+Mem:            7819        1846        3033           1        2939        5695
+Swap:           2047           0        2047
+
+NAME      TYPE SIZE USED PRIO
+/swapfile file   2G   0B   -2
+
+CONTAINER ID   NAME       CPU %     MEM USAGE / LIMIT   MEM %     NET I/O           BLOCK I/O     PIDS
+9fb14401db9c   kafka-ui   0.03%     251.8MiB / 640MiB   39.35%    72.8kB / 23.2kB   0B / 160kB    28
+c1d4fff24a74   kafka-3    12.69%    299.2MiB / 768MiB   38.96%    145kB / 136kB     0B / 3.06MB   80
+376ed0e0167a   kafka-1    4.43%     303.7MiB / 768MiB   39.54%    162kB / 155kB     0B / 3.12MB   81
+cf31bb509a6e   kafka-2    2.04%     309.9MiB / 768MiB   40.35%    169kB / 221kB     0B / 3.22MB   84
+2af91fc862b7   zk-1       0.16%     67.54MiB / 384MiB   17.59%    77kB / 32.9kB     0B / 856kB    51
+d340e4f66c94   zk-2       0.15%     69.04MiB / 384MiB   17.98%    98.4kB / 59.8kB   0B / 950kB    52
+1f0e5d1b22b4   zk-3       0.20%     73.79MiB / 384MiB   19.22%    141kB / 218kB     0B / 860kB    61
