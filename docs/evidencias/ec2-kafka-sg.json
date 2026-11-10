@@ -1,0 +1,73 @@
+{
+    "SecurityGroups": [
+        {
+            "GroupId": "sg-00799d130cf5687f4",
+            "IpPermissionsEgress": [
+                {
+                    "IpProtocol": "-1",
+                    "UserIdGroupPairs": [],
+                    "IpRanges": [
+                        {
+                            "CidrIp": "0.0.0.0/0"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": []
+                }
+            ],
+            "Tags": [
+                {
+                    "Key": "Name",
+                    "Value": "barriodigital-ec2-kafka"
+                }
+            ],
+            "VpcId": "vpc-05d156d12dbc3f939",
+            "SecurityGroupArn": "arn:aws:ec2:us-east-1:515972402689:security-group/sg-00799d130cf5687f4",
+            "OwnerId": "515972402689",
+            "GroupName": "barriodigital-ec2-kafka",
+            "Description": "ec2-kafka EP3-15: 9092-94 from apps SG; UI/SSH from lab IP",
+            "IpPermissions": [
+                {
+                    "IpProtocol": "tcp",
+                    "FromPort": 9092,
+                    "ToPort": 9094,
+                    "UserIdGroupPairs": [
+                        {
+                            "UserId": "515972402689",
+                            "GroupId": "sg-019ac21b57f54ed7f"
+                        }
+                    ],
+                    "IpRanges": [],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": []
+                },
+                {
+                    "IpProtocol": "tcp",
+                    "FromPort": 22,
+                    "ToPort": 22,
+                    "UserIdGroupPairs": [],
+                    "IpRanges": [
+                        {
+                            "CidrIp": "201.187.174.82/32"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": []
+                },
+                {
+                    "IpProtocol": "tcp",
+                    "FromPort": 8090,
+                    "ToPort": 8090,
+                    "UserIdGroupPairs": [],
+                    "IpRanges": [
+                        {
+                            "CidrIp": "201.187.174.82/32"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": []
+                }
+            ]
+        }
+    ]
+}

@@ -17,3 +17,15 @@ Respaldo del 18 de octubre de 2026, por si algo no abre en vivo.
 | `rabbit-exchanges.png` | `cmd.topic`, `cmd.direct` y `cmd.dead.dlx` |
 
 Los puertos que se ven dentro del contenedor de RabbitMQ no están abiertos a internet. El security group deja el 15672 desde la IP de la casa y desde la EC2 de apps, y el 5672 solo desde apps.
+
+## EP3-15 — ec2-kafka
+
+| Archivo | Qué muestra |
+|---|---|
+| `EP3-15-ec2-kafka.md` | Resumen: instancia, SG, swap, health, memoria, checklist |
+| `ec2-kafka-compose-ps.txt` | `docker compose ps` con 7 healthy |
+| `ec2-kafka-memory.txt` | `free -m`, swap, `docker stats` |
+| `ec2-kafka-oom.txt` | `OOMKilled=false` en los 7 |
+| `ec2-kafka-instance.json` / `ec2-kafka-console-describe.txt` | Datos EC2 (consola/CLI) |
+| `ec2-kafka-sg.json` / `ec2-kafka-sg-table.txt` | SG: 9092–94 desde apps; UI/SSH `/32`; sin 2181 |
+| `ec2-kafka-ui.png` | Kafka UI con cluster ONLINE |

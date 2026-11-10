@@ -1,0 +1,15 @@
+{
+    "Id": "i-0cca16eed64db7f8e",
+    "Name": "ec2-kafka",
+    "Type": "t3.large",
+    "State": "running",
+    "PublicIp": "3.239.192.62",
+    "PrivateIp": "172.31.0.172",
+    "Az": "us-east-1a",
+    "Sg": [
+        {
+            "GroupId": "sg-00799d130cf5687f4",
+            "GroupName": "barriodigital-ec2-kafka"
+        }
+    ]
+}
