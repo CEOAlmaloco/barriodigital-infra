@@ -2120,6 +2120,7 @@ Reglas que acompañan la matriz:
 3. **`/reports` es para el Admin y el Auditor.** Control interno revisa los indicadores de gestión. El Funcionario no entra a `/reports`: su vista es la bandeja, y recibe los plazos de report en el listado, el detalle e `/inicio`. Si entra EP3-62 (mapa, prioridad Media), ese contrato redefine su acceso.
 4. **Adjuntar después del alta:** nadie, en la prioridad Alta. Si entra EP3-64 (prioridad Media), el Vecino agrega fotos a un trámite abierto y ese contrato agrega su fila.
 5. **Funciones de prioridad Media y Baja** (comentario del vecino, cancelación, encuesta, exportación) agregan su fila en su propio contrato, si se cumple la fecha de corte del 17-nov.
+6. **Solo el Vecino crea.** requests también lo comprueba (principio 2): el staff que crea un trámite recibe 403 `Solo un Vecino puede crear un tramite`.
 
 **Rutas del frontend:**
 
@@ -2162,7 +2163,7 @@ Cada usuario tiene **exactamente uno** de los cuatro roles. Un token con más de
 
 **Por qué:** en una municipalidad real, vecinos y funcionarios son identidades distintas. El vecino entraría con una identidad ciudadana, como ClaveÚnica, y el funcionario con su cuenta corporativa, así que nadie tendría los dos roles en el mismo token. En BarrioDigital todos los usuarios, vecinos incluidos, inician sesión con Entra ID en un solo tenant, como exige el caso base, y esta regla evita que ese detalle de infraestructura genere combinaciones que el dominio no tiene. Además deja la segregación de funciones resuelta por construcción: el Auditor nunca tiene un rol operativo.
 
-La regla es autoritativa en el **BFF**, la única puerta pública, y en **requests**, que tiene las acciones operativas. Los demás servicios quedan cubiertos por el BFF y por el token interno (EP3-43), porque no publican puerto y sus endpoints son de solo Admin o de lectura.
+La regla es autoritativa en el **BFF**, la única puerta pública, y en **requests**, que tiene las acciones operativas. Los demás servicios quedan cubiertos por el BFF y por el token interno (EP3-43), porque no publican puerto y sus endpoints son de solo Admin o de lectura. En requests, `/api/requests/meta/**` queda fuera de la regla: el BFF la llama sin identidad y solo entrega datos fijos.
 
 `actor.role` guarda ese único rol, en `request_activity.actor_role` (EP3-31) y en el evento (EP3-01, sección 4). Así el Auditor puede filtrar las intervenciones con `actorRole=Admin`, junto con los tipos de evento que son intervenciones (EP3-07, sección 5.4).
 
@@ -2432,7 +2433,7 @@ Sigue el esquema de EP3-04, sección 5.
 | Paso | Código | Caso | Mensaje |
 |---|---|---|---|
 | 1 | 401 | Sin token | |
-| 2 | 403 | Sin rol, con más de un rol, Vecino o Auditor | Los de EP3-04 |
+| 2 | 403 | Sin rol, con más de un rol, Vecino o Auditor | Los de EP3-04. Vecino o Auditor: `No tienes el rol necesario para este recurso`, el mismo del BFF |
 | 2 | 403 | El Admin llama a `take` | `Solo un Funcionario puede tomar un tramite` |
 | 3 | 400 | `assigneeId` ausente | `assigneeId es obligatorio` |
 | 3 | 400 | `assigneeId` que no está en `/assignees` | `El destinatario debe ser un Funcionario de la lista` |
@@ -2502,6 +2503,7 @@ El destinatario de `PUT /assignee` tiene que estar en esa lista. `assignee_name`
      CHECK (actor_id IS NOT NULL OR (kind = 'ASIGNACION' AND visibility = 'PUBLICO'))
    ```
    Ninguna acción humana queda sin autor. El cambio va en un `ALTER` manual en `db/`, porque `ddl-auto: update` no relaja un `NOT NULL`, y en `@Check` en la entidad, para que H2 lo exija en los tests. `kind` y `visibility` ya se guardan con `@Enumerated(EnumType.STRING)`. `actor_name` ya es nullable. `actor_role` (EP3-31) nace nullable por la misma razón y por las filas históricas.
+   El mismo script reemplaza el `CHECK` que Hibernate creó para `kind` con `CREADO`, `ESTADO` y `GESTION`: lo busca por `SEARCH_CONDITION_VC`, porque su nombre `SYS_C…` cambia en cada base, y lo recrea con `ASIGNACION`. Sin ese paso, la primera toma falla en Oracle con ORA-02290.
 5. **Tiempo de asignación:** `tiempos` lo calcula con la primera fila `ASIGNACION` `INTERNO`, que es la que ve el staff.
 
 ### 7. Evento `request.assigned`
