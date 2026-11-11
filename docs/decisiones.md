@@ -179,6 +179,37 @@ El orden de evaluación está en EP3-04, sección 5.
 
 `application.yml` de `ms-barriodigital-requests` no tiene `server.error.include-message` seteado, el default de Spring Boot es `never`, por lo que el campo `message` del cuerpo de error venía vacío pese a que el código ya lanzaba el texto correcto. Esto afecta no solo al 409 nuevo, sino a los 400 y 404 que ya existían en `create()` y `getById()`. Se agrega `server.error.include-message: always` bajo `server:` (mismo nivel que `port`) como parte de EP1.5-04.
 
+## Contrato: encuesta de satisfacción (EP3-74)
+
+### 1. Regla
+
+Solo el **Vecino titular** califica un trámite en `RESUELTO`, **una sola vez**, con `score` entero de 1 a 5 y `comment` opcional (máximo 500). Queda en `municipal_requests.satisfaction_score` / `satisfaction_comment`, marca `CALIFICACION` en el historial y evento `request.rated` en el outbox.
+
+### 2. Endpoint
+
+```
+POST /api/requests/{id}/rating
+```
+
+```json
+{ "score": 5, "comment": "Rapido" }
+```
+
+200 con el `RequestView` actualizado (`satisfactionScore`, `satisfactionComment`). Sin comandos RabbitMQ.
+
+### 3. Errores
+
+| Código | Causa |
+|---|---|
+| 400 | falta `X-User-Id`, `score` ausente o fuera de 1..5, o `comment` > 500 |
+| 403 | el rol no es Vecino, o no es el titular |
+| 404 | el trámite no existe |
+| 409 | el trámite no está en `RESUELTO`, o ya fue calificado |
+
+### 4. Oracle
+
+`ddl-auto: update` agrega las columnas. El CHECK de `request_activity.kind` debe incluir `CALIFICACION`: script `db/satisfaction-rating.sql` en requests, una vez en bases ya desplegadas.
+
 ## Contrato: catálogo de tipos de trámite (EP1.5-02)
 
 ### 1. Modelo base
@@ -954,29 +985,32 @@ Los publica requests. Todos son versión 1.
 | `request.status-changed` | Cualquier cambio de estado válido, incluidos `EN_GESTION` y `RECHAZADO` |
 | `request.contact-logged` | Registro de una gestión de contacto |
 | `request.assigned` | Toma, asignación o reasignación del responsable del trámite |
+| `request.rated` | Encuesta del titular sobre un trámite `RESUELTO` (EP3-74) |
 
 Una transición rechazada (409) o una operación revertida no genera evento. El evento se escribe en el outbox dentro de la misma transacción del cambio (EP3-02).
 
 **Campos del payload:**
 
-| Campo | Tipo | `created` | `status-changed` | `contact-logged` | `assigned` |
-|---|---|---|---|---|---|
-| `requestId` | uuid | No nulo | No nulo | No nulo | No nulo |
-| `folio` | string | No nulo | No nulo | No nulo | No nulo |
-| `procedureType` | string | No nulo | No nulo | | |
-| `procedureLabel` | string | No nulo | | | |
-| `sector` | string | Nulo si no se indicó | Nulo si no se indicó | | |
-| `latitude`, `longitude` | número | Ambos nulos o ambos con valor | | | |
-| `status` | enum | Siempre `INGRESADO` | | | |
-| `slaBusinessDays` | entero | Nulo si el tipo no tiene plazo | | | |
-| `fromStatus`, `toStatus` | enum | | No nulos | | |
-| `reason` | string | | Con valor solo si `toStatus` es `RECHAZADO` | | Ver regla de asignación |
-| `interventionReason` | string | | Nulo si el actor no es Admin | Nulo si el actor no es Admin | |
-| `channel` | enum `ContactChannel` | | | No nulo | |
-| `result` | enum `ContactResult` | | | No nulo | |
-| `nextAttemptAt` | instant | | | Nulo si no se programó | |
-| `assigneeId`, `assigneeName` | string | | | | No nulos |
-| `previousAssigneeId` | string | | | | Ver regla de asignación |
+| Campo | Tipo | `created` | `status-changed` | `contact-logged` | `assigned` | `rated` |
+|---|---|---|---|---|---|---|
+| `requestId` | uuid | No nulo | No nulo | No nulo | No nulo | No nulo |
+| `folio` | string | No nulo | No nulo | No nulo | No nulo | No nulo |
+| `procedureType` | string | No nulo | No nulo | | | |
+| `procedureLabel` | string | No nulo | | | | |
+| `sector` | string | Nulo si no se indicó | Nulo si no se indicó | | | |
+| `latitude`, `longitude` | número | Ambos nulos o ambos con valor | | | | |
+| `status` | enum | Siempre `INGRESADO` | | | | |
+| `slaBusinessDays` | entero | Nulo si el tipo no tiene plazo | | | | |
+| `fromStatus`, `toStatus` | enum | | No nulos | | | |
+| `reason` | string | | Con valor solo si `toStatus` es `RECHAZADO` | | Ver regla de asignación | |
+| `interventionReason` | string | | Nulo si el actor no es Admin | Nulo si el actor no es Admin | | |
+| `channel` | enum `ContactChannel` | | | No nulo | | |
+| `result` | enum `ContactResult` | | | No nulo | | |
+| `nextAttemptAt` | instant | | | Nulo si no se programó | | |
+| `assigneeId`, `assigneeName` | string | | | | No nulos | |
+| `previousAssigneeId` | string | | | | Ver regla de asignación | |
+| `score` | entero 1..5 | | | | | No nulo |
+| `comment` | string | | | | | Nulo si no hubo comentario |
 
 Notas por campo:
 - **`folio`:** su formato y generación se definen en EP3-05.
@@ -1039,6 +1073,27 @@ Los permisos y el motivo se definen en EP3-05.
     "toStatus": "RECHAZADO",
     "reason": "Direccion fuera de la comuna",
     "interventionReason": null
+  }
+}
+```
+
+`request.rated`:
+
+```json
+{
+  "eventId": "2a3b4c5d-6e7f-4890-9abc-def123456789",
+  "eventType": "request.rated",
+  "schemaVersion": 1,
+  "occurredAt": "2026-11-12T18:00:00.000Z",
+  "producer": "requests",
+  "traceId": "cc33dd44-ee55-4ff6-9001-112233445566",
+  "sequence": 1088,
+  "actor": { "id": "5d2b8e61-3f4a-4c7b-9a10-2e3f4a5b6c7d", "name": "Vecino Test", "role": "Vecino" },
+  "payload": {
+    "requestId": "7b6e1d44-2a18-4c90-9f01-88aa11bb22cc",
+    "folio": "BD-2026-000123",
+    "score": 5,
+    "comment": "Rapido"
   }
 }
 ```
@@ -1292,6 +1347,7 @@ O quedan las tres, o ninguna. Un rollback no deja evento, y una transición rech
 |---|---|---|
 | Alta | `RequestService.create` | `request.created` |
 | Cambio de estado | `RequestService.changeStatus` | `request.status-changed` |
+| Encuesta de satisfacción | `RequestService.rate` | `request.rated` |
 | Gestión de contacto | `RequestActivityService.registerGestion` | `request.contact-logged` |
 | Toma o reasignación | Asignación (EP3-29) | `request.assigned` |
 
@@ -1299,7 +1355,7 @@ O quedan las tres, o ninguna. Un rollback no deja evento, y una transición rech
 
 Toda operación que genera un evento sobre un trámite **existente** toma antes el bloqueo `PESSIMISTIC_WRITE` de su fila (`findByIdForUpdate`). Así, dos operaciones sobre el mismo trámite se ejecutan una después de la otra, y la segunda recibe un `sequence` mayor.
 
-Hoy ya lo hacen `changeStatus` y `registerGestion`. La asignación debe hacerlo también. El alta no lo necesita porque la fila es nueva.
+Hoy ya lo hacen `changeStatus`, `rate` y `registerGestion`. La asignación debe hacerlo también. El alta no lo necesita porque la fila es nueva.
 
 **Cualquier operación nueva que genere eventos de un trámite debe seguir esta regla.**
 
@@ -2106,6 +2162,7 @@ Los roles son los App Roles de Entra ID: `Admin`, `Funcionario`, `Vecino` y `Aud
 | Ver la imagen adjunta | Solo los propios | Sí | Sí | Sí |
 | Historial | Público (sección 6) | Completo | Completo | Completo |
 | Registrar gestión | No | Solo como responsable | Sí, con motivo | No |
+| Calificar el propio trámite `RESUELTO` | Sí (titular, una vez) | No | No | No |
 | Cambiar estado y rechazar con motivo | No | Solo como responsable | Sí, con motivo | No |
 | Tomar un trámite sin responsable | No | Sí | No | No |
 | Asignar o reasignar | No | Solo los suyos (EP3-05) | Cualquiera | No |
