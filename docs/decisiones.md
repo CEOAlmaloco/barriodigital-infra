@@ -990,7 +990,7 @@ Notas por campo:
 
 Los permisos y el motivo se definen en EP3-05.
 
-**Ejemplos.** El valor de `folio` sigue el formato que fije EP3-05.
+**Ejemplos.** El `folio` sigue el formato de EP3-05. Como manda la regla 1 de la sección 5, cada ejemplo trae todos los campos de su tipo, también los que van en `null`.
 
 `request.created`:
 
@@ -1037,7 +1037,8 @@ Los permisos y el motivo se definen en EP3-05.
     "sector": "ralco",
     "fromStatus": "ADMITIDO",
     "toStatus": "RECHAZADO",
-    "reason": "Direccion fuera de la comuna"
+    "reason": "Direccion fuera de la comuna",
+    "interventionReason": null
   }
 }
 ```
@@ -1059,7 +1060,8 @@ Los permisos y el motivo se definen en EP3-05.
     "folio": "BD-2026-000123",
     "channel": "LLAMADA",
     "result": "NO_CONTESTA",
-    "nextAttemptAt": "2026-11-11T13:00:00Z"
+    "nextAttemptAt": "2026-11-11T13:00:00Z",
+    "interventionReason": null
   }
 }
 ```
@@ -1262,8 +1264,8 @@ No se usan transacciones de Kafka ni la semántica "exactly-once" de Kafka. Las 
 | `aggregate_id` | VARCHAR2(36) | No | `requestId`. Es la key del mensaje |
 | `event_type` | VARCHAR2(60) | No | Por ejemplo `request.status-changed` |
 | `payload` | CLOB | No | JSON del sobre completo de EP3-01, **sin** el campo `sequence` |
-| `created_at` | TIMESTAMP | No | Momento de la escritura en el outbox |
-| `published_at` | TIMESTAMP | Sí | `null` mientras el evento está pendiente |
+| `created_at` | TIMESTAMP WITH TIME ZONE | No | Momento de la escritura en el outbox |
+| `published_at` | TIMESTAMP WITH TIME ZONE | Sí | `null` mientras el evento está pendiente |
 | `attempts` | NUMBER | No | Envíos fallidos. Parte en 0 |
 | `last_error` | VARCHAR2(500) | Sí | Último error de envío, recortado a 500 caracteres |
 
@@ -1273,7 +1275,9 @@ La columna se llama `event_sequence` y no `sequence` porque `SEQUENCE` es palabr
 
 En la entidad JPA, la clave primaria es `event_id`. `event_sequence` se mapea con `@Column(insertable = false, updatable = false)` y `@Generated`, para que Oracle lo asigne y Hibernate lo lea después del insert.
 
-**Orden de aplicación del script.** El identity con `ORDER`, el índice y los nombres de las restricciones van en `db/schema.sql` de requests, porque `ddl-auto: update` no los crea. El script se aplica en Oracle **antes del primer arranque** de requests con esta versión. Si Hibernate crea primero la tabla, la crea sin `ORDER` y después no la modifica. En ese caso, como la tabla todavía no tiene eventos útiles, se elimina y se recrea con el script antes de publicar nada.
+**Orden de aplicación del script.** La tabla, con el identity con `ORDER`, el índice y los nombres de las restricciones, la crea `db/outbox-events.sql` de requests, porque `ddl-auto: update` no sabe crear el identity. `db/schema.sql` la repite como referencia. El script se aplica en Oracle **antes del primer arranque** de requests con esta versión, también en una base nueva. Si Hibernate crea primero la tabla, la crea sin identity, y la primera alta falla porque `event_sequence` es `NOT NULL`. En ese caso la tabla está vacía, y el script la elimina y la recrea. Con filas o ya con identity, el script se detiene sin tocarla.
+
+Las fechas van con zona, como el resto de las tablas de requests y como Hibernate mapea `Instant` en Oracle.
 
 #### 2.2 Una sola transacción
 
@@ -2601,6 +2605,7 @@ spring:
 
 1. El BFF toma `slaBusinessDays` del tipo que ya valida `ProcedureTypeValidator` y lo reenvía en `X-Procedure-Sla-Days`, igual que `X-Procedure-Label`. Si el tipo no tiene plazo, el header no se envía (EP3-25).
 2. requests lo guarda en el trámite, lo incluye en `request.created` y lo expone en `RequestView` para los cuatro roles (EP3-31). EP3-29 no lo expone porque la columna todavía no existe.
+   - **Header inválido.** Un valor que no es un entero de 1 a 120 se guarda como `null`, con un `WARN` en el log, y el alta sigue. El BFF ya validó el rango contra catalog, así que un valor inválido sería un error del BFF, y no debe impedir que el vecino ingrese su trámite. Es la misma regla que `X-Procedure-Label` mal codificado.
 3. **Editar el plazo del tipo no afecta a los trámites ya ingresados.** report calcula con el snapshot del alta. El plazo del tipo es una política de la municipalidad, y no se le cambia al vecino un compromiso ya informado.
 
 ### 2. Cómo se cuenta el plazo
