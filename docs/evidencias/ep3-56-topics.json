@@ -1,0 +1,8 @@
+[
+  {"name":"audit.timeline","partitions":3,"replicationFactor":3,"system":true},
+  {"name":"audit.timeline.audit.DLT","partitions":3,"replicationFactor":3,"system":true},
+  {"name":"ep3-15-load","partitions":3,"replicationFactor":3,"system":false},
+  {"name":"requests.events","partitions":3,"replicationFactor":3,"system":true},
+  {"name":"requests.events.audit.DLT","partitions":3,"replicationFactor":3,"system":true},
+  {"name":"requests.events.report.DLT","partitions":3,"replicationFactor":3,"system":true}
+]
