@@ -124,7 +124,7 @@
 | EN_TERRENO | RESUELTO |
 | EN_TERRENO | RECHAZADO |
 
-RESUELTO y RECHAZADO son estados terminales, sin transiciones salientes. RECHAZADO es alcanzable desde cualquier estado no terminal, no solo desde EN_TERRENO. Política de cupo: el cupo diario reservado al pasar a ADMITIDO (ver contrato de EP1.5-03) nunca se libera automáticamente por un rechazo posterior, la orquestación de cupo de EP1.5-18 solo participa en la transición INGRESADO a ADMITIDO.
+RESUELTO, RECHAZADO y CANCELADO son estados terminales, sin transiciones salientes. RECHAZADO es alcanzable desde cualquier estado no terminal vía PUT `/status`, no solo desde EN_TERRENO. CANCELADO solo se alcanza con `POST /api/requests/{id}/cancel` (EP3-76) desde INGRESADO; no entra en la tabla de este PUT. Política de cupo: el cupo diario reservado al pasar a ADMITIDO (ver contrato de EP1.5-03) nunca se libera automáticamente por un rechazo o una cancelación posterior, la orquestación de cupo de EP1.5-18 solo participa en la transición INGRESADO a ADMITIDO.
 
 ### 2. Autorización
 
@@ -134,7 +134,7 @@ RESUELTO y RECHAZADO son estados terminales, sin transiciones salientes. RECHAZA
 
 Un Funcionario que no es el responsable, o un trámite sin responsable, responde 403. El Vecino y el Auditor reciben 403 por rol. Las reglas completas están en EP3-04, secciones 3 y 4.
 
-El Vecino no puede cancelar su propio trámite en esta versión. Si entra EP3-76 (prioridad Baja), ese contrato lo define.
+**Actualizado por EP3-76.** El Vecino titular cancela su propio trámite solo con `POST /api/requests/{id}/cancel`, y solo en `INGRESADO`. No usa este PUT. El detalle está en el contrato de EP3-76.
 
 *Antes de EP3-04, solo el Funcionario podía invocar este endpoint y el Admin recibía 403.*
 
@@ -151,7 +151,7 @@ PUT /api/requests/{id}/status
 }
 ```
 
-- `status`: obligatorio, debe ser uno de los 6 valores de `RequestStatus` (INGRESADO, ADMITIDO, EN_GESTION, EN_TERRENO, RESUELTO, RECHAZADO).
+- `status`: obligatorio, debe ser uno de los valores operables por staff (`INGRESADO`, `ADMITIDO`, `EN_GESTION`, `EN_TERRENO`, `RESUELTO`, `RECHAZADO`). `CANCELADO` no se acepta aquí: responde 400 y remite al POST de cancelación.
 - `rejectionReason`: obligatorio y no vacío únicamente cuando `status` es RECHAZADO, se ignora en cualquier otra transición. Máximo 500 caracteres.
 - `interventionReason`: obligatorio y no vacío cuando quien llama es Admin (EP3-04, sección 3). Máximo 500 caracteres. Es un motivo **interno**: nunca le llega al Vecino. Es distinto de `rejectionReason`, que sí se le comunica. Si el Admin rechaza, los dos son obligatorios. Se ignora para los demás roles.
 - Requiere identidad del caller vía header `X-User-Id`, mismo patrón ya usado en `create()` y `getById()`.
@@ -178,6 +178,34 @@ El orden de evaluación está en EP3-04, sección 5.
 ### 6. Nota técnica: mensajes de error no llegaban al cliente
 
 `application.yml` de `ms-barriodigital-requests` no tiene `server.error.include-message` seteado, el default de Spring Boot es `never`, por lo que el campo `message` del cuerpo de error venía vacío pese a que el código ya lanzaba el texto correcto. Esto afecta no solo al 409 nuevo, sino a los 400 y 404 que ya existían en `create()` y `getById()`. Se agrega `server.error.include-message: always` bajo `server:` (mismo nivel que `port`) como parte de EP1.5-04.
+
+## Contrato: cancelación por el vecino (EP3-76)
+
+### 1. Decisión de estado
+
+Se crea el estado terminal **`CANCELADO`**. No se reutiliza `RECHAZADO`: el rechazo es una decisión municipal (Funcionario/Admin) con `rejectionReason`; la cancelación es del titular y no lleva motivo.
+
+### 2. Regla
+
+Solo el **Vecino titular** (`solicitanteId` = `X-User-Id`) puede cancelar, y solo si el trámite está en `INGRESADO`. Cualquier otro estado responde 409. Staff y Auditor reciben 403 por rol.
+
+### 3. Endpoint
+
+```
+POST /api/requests/{id}/cancel
+```
+
+Sin body. Responde 200 con el `RequestView` actualizado (`status: CANCELADO`). En la misma transacción: marca `ESTADO` en el historial y evento `request.cancelled` en el outbox (EP3-01 / EP3-02). No publica comandos RabbitMQ.
+
+### 4. Errores
+
+| Código | Causa |
+|---|---|
+| 400 | falta `X-User-Id` |
+| 403 | el rol no es Vecino |
+| 403 | el Vecino no es el titular |
+| 404 | el trámite no existe |
+| 409 | el trámite no está en `INGRESADO` |
 
 ## Contrato: catálogo de tipos de trámite (EP1.5-02)
 
@@ -951,7 +979,8 @@ Los publica requests. Todos son versión 1.
 | `eventType` | Cuándo |
 |---|---|
 | `request.created` | Alta del trámite, que queda en `INGRESADO` |
-| `request.status-changed` | Cualquier cambio de estado válido, incluidos `EN_GESTION` y `RECHAZADO` |
+| `request.status-changed` | Cualquier cambio de estado válido vía PUT `/status`, incluidos `EN_GESTION` y `RECHAZADO` |
+| `request.cancelled` | Cancelación del titular: `INGRESADO` → `CANCELADO` (EP3-76) |
 | `request.contact-logged` | Registro de una gestión de contacto |
 | `request.assigned` | Toma, asignación o reasignación del responsable del trámite |
 
@@ -959,24 +988,24 @@ Una transición rechazada (409) o una operación revertida no genera evento. El 
 
 **Campos del payload:**
 
-| Campo | Tipo | `created` | `status-changed` | `contact-logged` | `assigned` |
-|---|---|---|---|---|---|
-| `requestId` | uuid | No nulo | No nulo | No nulo | No nulo |
-| `folio` | string | No nulo | No nulo | No nulo | No nulo |
-| `procedureType` | string | No nulo | No nulo | | |
-| `procedureLabel` | string | No nulo | | | |
-| `sector` | string | Nulo si no se indicó | Nulo si no se indicó | | |
-| `latitude`, `longitude` | número | Ambos nulos o ambos con valor | | | |
-| `status` | enum | Siempre `INGRESADO` | | | |
-| `slaBusinessDays` | entero | Nulo si el tipo no tiene plazo | | | |
-| `fromStatus`, `toStatus` | enum | | No nulos | | |
-| `reason` | string | | Con valor solo si `toStatus` es `RECHAZADO` | | Ver regla de asignación |
-| `interventionReason` | string | | Nulo si el actor no es Admin | Nulo si el actor no es Admin | |
-| `channel` | enum `ContactChannel` | | | No nulo | |
-| `result` | enum `ContactResult` | | | No nulo | |
-| `nextAttemptAt` | instant | | | Nulo si no se programó | |
-| `assigneeId`, `assigneeName` | string | | | | No nulos |
-| `previousAssigneeId` | string | | | | Ver regla de asignación |
+| Campo | Tipo | `created` | `status-changed` | `cancelled` | `contact-logged` | `assigned` |
+|---|---|---|---|---|---|---|
+| `requestId` | uuid | No nulo | No nulo | No nulo | No nulo | No nulo |
+| `folio` | string | No nulo | No nulo | No nulo | No nulo | No nulo |
+| `procedureType` | string | No nulo | No nulo | No nulo | | |
+| `procedureLabel` | string | No nulo | | | | |
+| `sector` | string | Nulo si no se indicó | Nulo si no se indicó | Nulo si no se indicó | | |
+| `latitude`, `longitude` | número | Ambos nulos o ambos con valor | | | | |
+| `status` | enum | Siempre `INGRESADO` | | | | |
+| `slaBusinessDays` | entero | Nulo si el tipo no tiene plazo | | | | |
+| `fromStatus`, `toStatus` | enum | | No nulos | No nulos (`INGRESADO` → `CANCELADO`) | | |
+| `reason` | string | | Con valor solo si `toStatus` es `RECHAZADO` | | | Ver regla de asignación |
+| `interventionReason` | string | | Nulo si el actor no es Admin | | Nulo si el actor no es Admin | |
+| `channel` | enum `ContactChannel` | | | | No nulo | |
+| `result` | enum `ContactResult` | | | | No nulo | |
+| `nextAttemptAt` | instant | | | | Nulo si no se programó | |
+| `assigneeId`, `assigneeName` | string | | | | | No nulos |
+| `previousAssigneeId` | string | | | | | Ver regla de asignación |
 
 Notas por campo:
 - **`folio`:** su formato y generación se definen en EP3-05.
@@ -1039,6 +1068,29 @@ Los permisos y el motivo se definen en EP3-05.
     "toStatus": "RECHAZADO",
     "reason": "Direccion fuera de la comuna",
     "interventionReason": null
+  }
+}
+```
+
+`request.cancelled`:
+
+```json
+{
+  "eventId": "1b2c3d4e-5f60-4789-8abc-def012345678",
+  "eventType": "request.cancelled",
+  "schemaVersion": 1,
+  "occurredAt": "2026-11-11T12:10:00.000Z",
+  "producer": "requests",
+  "traceId": "bb22cc33-dd44-4ee5-8ff6-001122334455",
+  "sequence": 1060,
+  "actor": { "id": "5d2b8e61-3f4a-4c7b-9a10-2e3f4a5b6c7d", "name": "Vecino Test", "role": "Vecino" },
+  "payload": {
+    "requestId": "7b6e1d44-2a18-4c90-9f01-88aa11bb22cc",
+    "folio": "BD-2026-000123",
+    "procedureType": "bache",
+    "sector": "ralco",
+    "fromStatus": "INGRESADO",
+    "toStatus": "CANCELADO"
   }
 }
 ```
@@ -1292,6 +1344,7 @@ O quedan las tres, o ninguna. Un rollback no deja evento, y una transición rech
 |---|---|---|
 | Alta | `RequestService.create` | `request.created` |
 | Cambio de estado | `RequestService.changeStatus` | `request.status-changed` |
+| Cancelación del titular | `RequestService.cancel` | `request.cancelled` |
 | Gestión de contacto | `RequestActivityService.registerGestion` | `request.contact-logged` |
 | Toma o reasignación | Asignación (EP3-29) | `request.assigned` |
 
@@ -1299,7 +1352,7 @@ O quedan las tres, o ninguna. Un rollback no deja evento, y una transición rech
 
 Toda operación que genera un evento sobre un trámite **existente** toma antes el bloqueo `PESSIMISTIC_WRITE` de su fila (`findByIdForUpdate`). Así, dos operaciones sobre el mismo trámite se ejecutan una después de la otra, y la segunda recibe un `sequence` mayor.
 
-Hoy ya lo hacen `changeStatus` y `registerGestion`. La asignación debe hacerlo también. El alta no lo necesita porque la fila es nueva.
+Hoy ya lo hacen `changeStatus`, `cancel` y `registerGestion`. La asignación debe hacerlo también. El alta no lo necesita porque la fila es nueva.
 
 **Cualquier operación nueva que genere eventos de un trámite debe seguir esta regla.**
 
@@ -2106,6 +2159,7 @@ Los roles son los App Roles de Entra ID: `Admin`, `Funcionario`, `Vecino` y `Aud
 | Ver la imagen adjunta | Solo los propios | Sí | Sí | Sí |
 | Historial | Público (sección 6) | Completo | Completo | Completo |
 | Registrar gestión | No | Solo como responsable | Sí, con motivo | No |
+| Cancelar el propio trámite en `INGRESADO` | Sí (titular) | No | No | No |
 | Cambiar estado y rechazar con motivo | No | Solo como responsable | Sí, con motivo | No |
 | Tomar un trámite sin responsable | No | Sí | No | No |
 | Asignar o reasignar | No | Solo los suyos (EP3-05) | Cualquiera | No |
