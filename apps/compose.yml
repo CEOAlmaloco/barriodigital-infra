@@ -1,4 +1,4 @@
-# BarrioDigital — BFF + requests + catalog + notify + mq-admin
+# BarrioDigital — BFF + requests + catalog + notify + mq-admin + kafka-admin + report + audit
 # Uso:
 #   docker compose --env-file .env up -d --build
 #
@@ -6,7 +6,8 @@
 #   - .env junto a este archivo (no subir a git)
 #   - carpeta ./wallet con el Autonomous wallet descomprimido
 #   - MQ iniciado: notify, requests y mq-admin comparten la red externa de ese proyecto
-# catalog, notify y mq-admin no publican puerto.
+#   - Kafka iniciado (EP3-54): KAFKA_BOOTSTRAP_SERVERS apunta a KAFKA_HOST_IP:9092,9093,9094
+# catalog, notify, mq-admin, kafka-admin, report y audit no publican puerto.
 # requests espera a notify healthy. El BFF espera a que catalog esté UP.
 
 name: barriodigital-apps
@@ -66,11 +67,79 @@ services:
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Definir RABBITMQ_PASSWORD}
       RABBITMQ_MANAGEMENT_URL: ${RABBITMQ_MANAGEMENT_URL:-http://rabbitmq-1:15672}
       RABBITMQ_VHOST: ${RABBITMQ_VHOST:-/}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?Definir INTERNAL_TOKEN}
     networks:
       - default
       - mq
     healthcheck:
       test: ["CMD", "curl", "-fsS", "--max-time", "4", "http://localhost:8084/actuator/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  kafka-admin:
+    build:
+      context: ../../ms-barriodigital-kafka-admin
+      dockerfile: Dockerfile
+    container_name: bd-kafka-admin
+    mem_limit: 512m
+    expose:
+      - "8085"
+    environment:
+      JAVA_TOOL_OPTIONS: "-Xmx384m"
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?Definir KAFKA_BOOTSTRAP_SERVERS}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?Definir INTERNAL_TOKEN}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "4", "http://localhost:8085/actuator/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  report:
+    build:
+      context: ../../ms-barriodigital-report
+      dockerfile: Dockerfile
+    container_name: bd-report
+    mem_limit: 512m
+    expose:
+      - "8086"
+    environment:
+      JAVA_TOOL_OPTIONS: "-Xmx384m"
+      ORACLE_URL: ${ORACLE_URL}
+      ORACLE_USER: ${ORACLE_USER}
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD}
+      ORACLE_WALLET_DIR: /wallet
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?Definir KAFKA_BOOTSTRAP_SERVERS}
+    volumes:
+      - ${WALLET_HOST_PATH:-./wallet}:/wallet:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "4", "http://localhost:8086/actuator/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  audit:
+    build:
+      context: ../../ms-barriodigital-audit
+      dockerfile: Dockerfile
+    container_name: bd-audit
+    mem_limit: 384m
+    expose:
+      - "8087"
+    environment:
+      JAVA_TOOL_OPTIONS: "-Xmx256m"
+      ORACLE_URL: ${ORACLE_URL}
+      ORACLE_USER: ${ORACLE_USER}
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD}
+      ORACLE_WALLET_DIR: /wallet
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?Definir KAFKA_BOOTSTRAP_SERVERS}
+    volumes:
+      - ${WALLET_HOST_PATH:-./wallet}:/wallet:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "4", "http://localhost:8087/actuator/health"]
       interval: 20s
       timeout: 5s
       retries: 10
@@ -93,6 +162,7 @@ services:
       RABBIT_ADDRESSES: ${RABBIT_ADDRESSES:-rabbitmq-1:5672,rabbitmq-2:5672}
       RABBIT_USER: ${RABBIT_USER:-barriodigital}
       RABBIT_PASSWORD: ${RABBIT_PASSWORD:?Definir RABBIT_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?Definir KAFKA_BOOTSTRAP_SERVERS}
     volumes:
       - ${WALLET_HOST_PATH:-./wallet}:/wallet:ro
     networks:
@@ -146,12 +216,22 @@ services:
       REQUESTS_BASE_URL: ${REQUESTS_BASE_URL:-http://requests:8081}
       CATALOG_BASE_URL: ${CATALOG_BASE_URL:-http://catalog:8082}
       MQ_ADMIN_BASE_URL: ${MQ_ADMIN_BASE_URL:-http://mq-admin:8084}
+      KAFKA_ADMIN_BASE_URL: ${KAFKA_ADMIN_BASE_URL:-http://kafka-admin:8085}
+      REPORT_BASE_URL: ${REPORT_BASE_URL:-http://report:8086}
+      AUDIT_BASE_URL: ${AUDIT_BASE_URL:-http://audit:8087}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?Definir INTERNAL_TOKEN}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:4200}
     depends_on:
       requests:
         condition: service_started
       catalog:
         condition: service_healthy
+      kafka-admin:
+        condition: service_started
+      report:
+        condition: service_started
+      audit:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 20s
