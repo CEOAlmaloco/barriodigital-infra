@@ -1,0 +1,25 @@
+EP3-56 — Caos Kafka / report / DLT — 2026-11-12
+
+1) Un broker detenido (kafka-3 stop)
+- Antes: ISR 2,3,1 / 3,1,2 / 1,2,3
+- Después: ISR 2,1 / 1,2 / 1,2  (ISR=2)
+- Alta de trámite con 1 broker down → HTTP 201 (BD-2026-000013)
+
+2) Todos los brokers detenidos
+- take + ADMITIDO sobre 6cf9c3c9-… → HTTP 200 (estado responde normal)
+- OutboxRelay: relay-detenido sequence=9 motivo="sin confirmacion del broker en 10000 ms"
+- Al levantar kafka-1/2/3: ISR vuelve a 3; relay-reanudado pendientes=1
+- Eventos del trámite (seq 8 created, 9 assigned, 10 status-changed) quedan published_at NOT NULL
+
+3) report detenido
+- report-group sin miembros; LAG partition 1 = 1 (CURRENT 10 → LOG-END 11)
+- Al subir report: LAG=0; KPIs lastEventAt actualizado; active INGRESADO/ADMITIDO reflejan catch-up
+
+4) Mensaje malformado
+- Produce {"not":"a-valid-envelope"} a requests.events
+- Llega a requests.events.report.DLT offset 0 (partition 1)
+- kafka-admin GET /api/kafka/dlt/requests.events.report.DLT/messages → 200 con NonRetryableEventException "falta eventType"
+- POST .../replay offsets[{partition:1,offset:0}] → OMITIDO "sin destino" (sobre sin metadatos de destino útiles); evidencia de DLT + API de replay
+
+5) Regresión RabbitMQ
+- notify logs: email-simulado admitted/visit/resolved, crew-ticket, certificate-pdf receipt/resolved en el flujo EP356

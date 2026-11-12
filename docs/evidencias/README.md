@@ -39,3 +39,15 @@ Los puertos que se ven dentro del contenedor de RabbitMQ no están abiertos a in
 | `ep3-55-gateway-401.txt` | Sin token: kafka/report/audit/assignees → 401 Unauthorized del Gateway |
 | `ep3-55-gateway-403.txt` | Funcionario con JWT en `/api/mq/queues` → 403 del BFF |
 
+## EP3-56 — Despliegue nube + flujo completo
+
+| Archivo | Qué muestra |
+|---|---|
+| `ep3-56-topics.json` | Tópicos sistema 3p/RF3 + 3 DLT (kafka-admin) |
+| `ep3-56-stack-healthy.txt` | 8 contenedores apps healthy |
+| `ep3-56-flujo-tramite.txt` | create→take→admit→gestión→terreno→resuelto + KPIs |
+| `ep3-56-audit-config-ip.txt` | cupo + cola en `audit.timeline` con `sourceIp` |
+| `ep3-56-caos-kafka.txt` | ISR=2, outbox con brokers down, lag report, DLT, Rabbit |
+
+Recorrido anotado: `docs/kafka.md`.
+

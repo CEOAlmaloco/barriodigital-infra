@@ -1,0 +1,28 @@
+EP3-56 — Flujo del trámite (sin mocks) — 2026-11-12
+
+Host apps: 3.92.161.52 (docker network barriodigital-apps_default)
+Trámite: 0758ccb6-1a9e-43b5-854e-cc5ad0da13ba · folio BD-2026-000012
+
+Pasos (HTTP directo a requests:8081 con X-User-*):
+1. Vecino crea → 201 INGRESADO
+2. Funcionario take → 200 assignee=oid-ep356-func
+3. PUT ADMITIDO → 200
+4. PUT EN_GESTION → 200
+5. POST gestiones {channel:LLAMADA,result:CONTESTO} → 201
+6. PUT EN_TERRENO → 200
+7. PUT RESUELTO → 200
+
+Outbox (tras recrear outbox_events con IDENTITY ORDER):
+seq 1..7 publicados a requests.events (partition 1).
+
+KPIs (GET report:8086/api/report/kpis?range=last24h) < 5 s tras el cierre:
+- requestsOverTime hora 19:00Z count=1
+- resolvedCount=1
+- activeByStatus todos 0
+- slaCompliance.rate=1.0
+- lastEventAt=2026-11-12T19:18:28.249702Z
+- proyección report_request_projection status=RESUELTO
+
+Timeline audit (API EP3-42): NO desplegada aún (audit jar solo tiene consumidor audit.timeline).
+Los pasos del trámite quedan en requests.events + proyección report; el historial operativo vive en request_activity de requests.
+Pendiente EP3-40/42 para timeline de auditoría HTTP por requestId.

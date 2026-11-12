@@ -1,0 +1,25 @@
+EP3-56 — Auditoría de configuración + IP de origen — 2026-11-12
+
+1) Cambio de cupo (catalog)
+PUT catalog:8082/api/catalog/procedures/bache
+Headers: X-User-Roles=Admin, X-Source-Ip=198.51.100.77
+Body: dailyQuota 8→9, slaBusinessDays=5
+HTTP 200
+
+Evento en audit.timeline:
+eventType=procedure-type.updated
+actor.sourceIp=198.51.100.77
+before.dailyQuota=8 → after.dailyQuota=9
+
+2) Alta de cola (mq-admin)
+POST mq-admin:8084/api/mq/queues
+Headers: X-Internal-Token, X-User-Roles=Admin, X-Source-Ip=203.0.113.50
+Body: name=ep356.demo.q
+HTTP 201
+
+Evento en audit.timeline:
+eventType=queue.created
+actor.sourceIp=203.0.113.50
+payload.resourceId=ep356.demo.q
+
+Nota: llamada directa a los MS (no Gateway). El mapeo Gateway→X-Source-Ip quedó evidenciado en EP3-55; aquí se prueba que catalog/mq-admin publican sourceIp al tópico.
