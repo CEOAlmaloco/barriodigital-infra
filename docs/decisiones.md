@@ -3151,9 +3151,9 @@ El ejemplo muestra 2 de los 24 tramos.
 
 Altas por tipo de trámite en la ventana. `limit` va de 1 a 20, con 5 por defecto.
 
-1. **Se agrupa por `procedureType`.** El label es un snapshot de cada alta (EP3-01), y si el Admin renombró el tipo, los trámites tienen labels distintos. Se devuelve el `procedureLabel` del **alta más reciente dentro de la ventana**.
+1. **Se agrupa por `procedureType`.** El label es un snapshot de cada alta (EP3-01), y si el Admin renombró el tipo, los trámites tienen labels distintos. Se devuelve el `procedureLabel` del **alta más reciente dentro de la ventana**. Si varias altas del tipo comparten ese instante, gana el label mayor por code point de Unicode.
 2. **La consulta es portable entre Oracle y H2.** La forma natural en Oracle, `MAX(...) KEEP (DENSE_RANK LAST ORDER BY created_at)`, no existe en H2, y los tests tienen que probar la misma lógica que corre en Oracle (el principio de EP3-05, sección 1.3). Se usa una subconsulta sobre el `created_at` máximo por tipo, o dos consultas.
-3. **Orden:** por `count` descendente, y después por `procedureType`.
+3. **Orden:** por `count` descendente, y después por `procedureType` por code point. El orden, el `limit` y el desempate del label se resuelven en el servicio, sobre el conteo agrupado de la base: en Oracle, `ORDER BY` y `MAX` sobre texto dependen de `NLS_SORT` y `NLS_COMP`, y el driver toma `NLS_SORT` del locale, así que no coincidirían con H2.
 
 ```json
 {
