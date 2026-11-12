@@ -443,9 +443,8 @@ Todos los mensajes usan el mismo sobre. `type` dice qué evento es. `eventId` id
 
 `payload` lleva `requestId`, `procedureType`, `procedureLabel`, `address` y `solicitanteEmail`. `solicitanteEmail` puede venir `null` en trámites antiguos. `crew.ticket` necesita `address`. Los emails necesitan `solicitanteEmail`.
 
-**Actualización (EP3-05, 5-nov-2026):** `payload` agrega `folio` (`BD-AAAA-NNNNNN`). Puede venir `null` en mensajes publicados antes de EP3-28. Es un cambio compatible: los consumidores de notify ignoran los campos que no usan.
 
-**Actualización (EP3-33, 11-nov-2026):** `payload` agrega `rejectionReason`, el motivo que el vecino ve en su historial. Solo tiene valor en `email.rejected` y va `null` en los demás tipos. `interventionReason` del Admin **nunca** viaja en un payload de RabbitMQ (EP3-04, sección 6.3): el payload se arma desde el trámite, no desde el historial. Es un cambio compatible.
+**Actualización (EP3-34, 11-nov-2026):** notify maneja `email.rejected` con el asunto «BarrioDigital: trámite rechazado» y la línea `Motivo: <rejectionReason>`. En ese tipo `rejectionReason` es obligatorio: si falta o viene vacío, el mensaje es no recuperable y va a `q.cmd.email.dlq` sin enviarse (EP2-03). Todos los correos muestran `Folio: <folio>` cuando viene. Si no viene, el correo queda igual que antes.
 
 ### 3. Ejemplos
 
@@ -591,7 +590,6 @@ El cliente de RabbitMQ usa un timeout de conexión de 2 segundos. Publicar es as
 - No hay outbox. Si el broker está caído en el momento de publicar, el evento se pierde. Solo queda el log. Es el costo de no hacer esperar al HTTP.
 - La idempotencia vive en la memoria de notify. Si ese proceso se reinicia, olvida los `eventId` ya vistos y puede repetir un correo o un PDF.
 - Si el vecino desactivó los avisos por correo (EP3-65), `email.rejected` no se publica, igual que los demás `email.*`.
-- Mientras notify no maneje `email.rejected` (EP3-34), lo trata como tipo desconocido y lo deja en `q.cmd.email.dlq` (EP2-03). El mensaje no se pierde, pero el correo no sale. Por eso EP3-34 se despliega junto con EP3-33 o antes.
 
 ## Contrato: topología RabbitMQ (EP2-02)
 
@@ -712,7 +710,7 @@ No recuperable, subclase de `NonRecoverableException`:
 
 - El cuerpo no es JSON o no trae el sobre (`type`, `eventId`, `payload`).
 - `type` no es uno de los siete del contrato de mensajería.
-- Falta un dato que el caso no puede inventar: `solicitanteEmail` en un email, `address` en `crew.ticket`.
+- Falta un dato que el caso no puede inventar: `solicitanteEmail` en un email, `rejectionReason` en `email.rejected` (EP3-34), `address` en `crew.ticket`.
 
 Un dato ausente no se reintenta. Reintentar no lo hace aparecer.
 
@@ -764,6 +762,8 @@ Notify acepta exclusivamente `certificate.receipt` y `certificate.resolved`, con
 `requestId` y `procedureType` son obligatorios, textuales y con contenido tras recortar espacios. `procedureLabel` es opcional y usa `procedureType` como respaldo. `address` es opcional y solo se muestra si tiene texto. Ausencia, null y blancos se admiten en esos opcionales; un valor no nulo y no textual se rechaza. No se usa ni valida `solicitanteEmail`, no se consulta el catálogo y `correlationId` no reemplaza `requestId`. No se exige UUID adicionalmente al parser compartido ni se modifica el payload.
 
 El comprobante dice «Tu trámite fue registrado en BarrioDigital con estado INGRESADO.» y el certificado «Tu trámite fue marcado como RESUELTO en BarrioDigital.». Muestran el identificador completo, tipo, dirección si existe y estado correspondiente al evento. No acreditan una consulta del estado actual ni la ejecución satisfactoria de trabajos. No incluyen datos municipales inventados, firmas, sellos, folios legales, QR ni afirmaciones de validez oficial.
+
+**Actualización (EP3-34, 11-nov-2026):** cuando el payload trae `folio`, los dos documentos lo muestran como «Folio de seguimiento», antes del identificador. Es opcional: si falta, viene null o en blanco, se omite, y un valor no textual se rechaza. Es el número de seguimiento del vecino (EP3-05, sección 1.1), no un folio legal, así que la exclusión anterior se mantiene.
 
 Al final del contenido aparecen el identificador completo del evento, su publicación cuando hay `timestamp` y la generación obtenida de un `Clock` inyectado. Ambas fechas usan `dd/MM/uuuu HH:mm:ss UTC`. El timestamp es publicación, no fecha de ingreso o resolución.
 
