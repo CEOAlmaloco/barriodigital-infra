@@ -51,4 +51,6 @@ Kafka sigue sin `up` funcional.
 - `ms-barriodigital-bff`
 - `ms-barriodigital-requests`
 - `ms-barriodigital-catalog`
-- `ms-barriodigital-notify` / `report` / `audit` (U2/U3)
+- `ms-barriodigital-notify`
+- `ms-barriodigital-mq-admin`
+- `ms-barriodigital-report` / `audit` / `kafka-admin`
