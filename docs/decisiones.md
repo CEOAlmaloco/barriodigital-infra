@@ -46,15 +46,20 @@
   a que el health de catalog esté UP antes de arrancar el BFF. Si se recrea el
   BFF mientras catalog no responde, el alta de trámites responde 503.
 - API Gateway (HTTP API `barriodigital-http`), Invoke URL: https://0yo277ntr8.execute-api.us-east-1.amazonaws.com
-  - Reenvía al BFF en `http://54.175.48.178:8080`. En catalog y en mq la integración
-    conserva el prefijo (`/api/catalog/{proxy}`, `/api/mq/{proxy}`): en esas rutas
-    `{proxy}` es solo el resto del path.
+  - Reenvía al BFF en `http://3.92.161.52:8080` (EC2 `barriodigital-apps`; la IP pública
+    cambia al reiniciar el lab). En catalog, mq, kafka, report y audit la integración
+    conserva el prefijo (`/api/catalog/{proxy}`, `/api/mq/{proxy}`, `/api/kafka/{proxy}`,
+    `/api/report/{proxy}`, `/api/audit/{proxy}`): en esas rutas `{proxy}` es solo el
+    resto del path.
   - JWT Authorizer `entra-jwt`: issuer https://login.microsoftonline.com/ce6e98c4-63f0-4b79-83e5-20925b5fada2/v2.0.
     Audiences: `a0773f3e-abc6-4b53-86fc-9d33a2eddef3` y `api://a0773f3e-abc6-4b53-86fc-9d33a2eddef3`.
   - JWT en las rutas de negocio. Sin token el Gateway responde 401. No mira el rol:
     Funcionario con token válido en `/api/mq/queues` recibe 403 del BFF
     (`No tienes el rol necesario para este recurso`). Con catalog y requests
     arriba, `POST /api/requests` por este Gateway respondió 201.
+  - Todas las integraciones HTTP_PROXY al BFF mapean
+    `overwrite:header.X-Source-Ip` = `$context.identity.sourceIp` (EP3-55). No se usa
+    `append` ni `X-Forwarded-For` como IP de origen.
   - `GET /api/ping`, `GET /api/requests`, `POST /api/requests` y `GET /api/requests/{id}`
     siguen entrando por `GET|POST|PUT|PATCH|DELETE /{proxy+}`.
   - Rutas explícitas de EP2-30, mismo authorizer `entra-jwt`:
@@ -62,13 +67,21 @@
     - `GET /api/requests/meta/transitions` (literal, para que `{id}` no capture `meta`).
     - `PUT /api/requests/{id}/status`.
     - `GET`, `POST`, `PUT` y `DELETE /api/mq/{proxy+}`.
+  - Rutas explícitas de EP3-55, mismo authorizer `entra-jwt`:
+    - `GET`, `POST`, `PUT`, `PATCH` y `DELETE /api/kafka/{proxy+}`.
+    - `GET /api/report/{proxy+}`.
+    - `GET /api/audit/{proxy+}`.
+    - `GET /api/requests/assignees` (literal, para que `{id}` no capture `assignees`).
+    - `POST /api/requests/{id}/take`.
+    - `PUT /api/requests/{id}/assignee`.
+  - Script reproducible: `apps/scripts/ep3-55-apigw-routes.ps1`.
   - No quedó `ANY /{proxy+}`. Esa ruta también capturaba `OPTIONS` y el preflight
     respondía 401. HTTP API no tiene `**`; `{proxy+}` cubre el resto del path.
   - CORS del Gateway, sin `*`. Orígenes: `http://localhost:4200`,
     `https://main.db7dk8tawyzry.amplifyapp.com` y el sitio S3 del front de este lab.
     Métodos `GET`, `POST`, `PUT`, `PATCH`, `DELETE` y `OPTIONS`. Headers
     `authorization`, `content-type`, `x-user-id` y `x-user-roles`. El preflight lo
-    responde el Gateway, sin JWT.
+    responde el Gateway, sin JWT. Revisado en EP3-55; sin cambios.
 - Frontend desplegado en AWS Amplify Hosting: https://main.db7dk8tawyzry.amplifyapp.com
   - App `barriodigital-front` (`db7dk8tawyzry`), rama `main`, job manual 3.
     El build publicado llama a este Gateway. Entra ya acepta el redirect de

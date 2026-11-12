@@ -44,7 +44,6 @@ Kafka sigue sin `up` funcional.
 - `docs/decisiones.md` — App Registration de Entra ID, roles y usuarios de prueba, despliegue en AWS (URLs reales), contrato JWT y limitaciones conocidas
 - `docs/arquitectura.md` — diagramas del flujo Amplify → API Gateway → BFF → requests → Oracle
 - `docs/matriz-funcionalidades.md` — estado real de cada funcionalidad (EP1–EP3), con componente y evidencia
-- `docs/checklist-parcial-5.md` — checklist Parcial 5 (Kafka): indicadores, transversales y entrega AVA
 
 ## Repos relacionados
 

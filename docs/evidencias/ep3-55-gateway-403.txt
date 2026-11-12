@@ -1,0 +1,5 @@
+﻿Funcionario Test via Gateway (token Entra JWT válido):
+GET /api/mq/queues -> 403 {"status":403,"error":"Forbidden","message":"No tienes el rol necesario para este recurso","path":"/api/mq/queues"}
+GET /api/kafka/topics -> 404 (BFF desplegado aún sin proxy EP3-44; el Gateway sí autentica y reenvía)
+Sin token:
+GET /api/kafka/topics -> 401 {"message":"Unauthorized"}
