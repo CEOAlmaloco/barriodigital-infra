@@ -1,8 +1,10 @@
 # Estado de las funcionalidades
 
-Corte del 18 de octubre de 2026. Se actualiza cuando se cierra cada parte.
+Corte del 12 de noviembre de 2026. Se actualiza cuando se cierra cada parte.
 
 Una fila está **implementada** solo si el comportamiento está en el código mergeado y, cuando corresponde a un servicio o al frontend, corre en el lab. Si falta evidencia, o si solo funciona en local, queda **parcial**. **No implementada** significa que el código de `develop` no hace esa función.
+
+EP3: el código de varios servicios ya está en `develop`, pero el recorrido completo en la nube ([EP3-56](https://github.com/CEOAlmaloco/frontend-barriodigital/issues/166)) sigue abierto. Por eso lo que depende de Kafka/report/audit en EC2 queda **parcial** aunque el PR del servicio esté mergeado.
 
 | Estado | Significado |
 |---|---|
@@ -38,8 +40,7 @@ Una fila está **implementada** solo si el comportamiento está en el código me
 | El formulario de trámites usa el catálogo, no una lista fija | implementada | frontend | [PR 59](https://github.com/CEOAlmaloco/frontend-barriodigital/pull/59) |
 | Cupo diario, reset en hora de Chile, y descuento al admitir | implementada | catalog, BFF, frontend | [PR 7](https://github.com/CEOAlmaloco/ms-barriodigital-catalog/pull/7), [PR 17](https://github.com/CEOAlmaloco/ms-barriodigital-bff/pull/17), [PR 100](https://github.com/CEOAlmaloco/frontend-barriodigital/pull/100) |
 | Reservar y liberar cupo dentro de la red del compose | implementada | catalog | `POST /api/catalog/procedures/{value}/reserve`. [PR 8](https://github.com/CEOAlmaloco/ms-barriodigital-catalog/pull/8) |
-| Pantalla de Reportería | parcial | frontend | Placeholder. [PR 101](https://github.com/CEOAlmaloco/frontend-barriodigital/pull/101) |
-| Pantalla de Auditoría | parcial | frontend | Scaffold, sin datos de auditoría. [PR 102](https://github.com/CEOAlmaloco/frontend-barriodigital/pull/102) |
+| Plazo en días hábiles por tipo de trámite | parcial | catalog, BFF | Código en `develop`: [PR catalog 14](https://github.com/CEOAlmaloco/ms-barriodigital-catalog/pull/14), [PR BFF 26](https://github.com/CEOAlmaloco/ms-barriodigital-bff/pull/26). Falta cierre de despliegue EP3-56 |
 
 ## Mensajería
 
@@ -62,3 +63,43 @@ Una fila está **implementada** solo si el comportamiento está en el código me
 | Frontend de Amplify llamando al Gateway de este lab | implementada | frontend | [PR 104](https://github.com/CEOAlmaloco/frontend-barriodigital/pull/104). La sesión abre en `/inicio` |
 | Diagrama de colas y procedimiento para un mensaje muerto | implementada | infra | [`rabbitmq-mensaje-muerto.md`](rabbitmq-mensaje-muerto.md), [PR 36](https://github.com/CEOAlmaloco/barriodigital-infra/pull/36). El mismo sobre se publicó en este lab y quedó en `q.cmd.email.dlq` |
 | Flujo completo de trámites con las colas de la nube | implementada | requests, notify, catalog | Recorrido anotado en [`rabbitmq.md`](rabbitmq.md). Issue [#92](https://github.com/CEOAlmaloco/frontend-barriodigital/issues/92) |
+
+## Folio, roles y asignación (EP3)
+
+| Funcionalidad | Estado | Componente | Evidencia |
+|---|---|---|---|
+| Folio legible anual en el trámite | parcial | requests | [PR 24](https://github.com/CEOAlmaloco/ms-barriodigital-requests/pull/24). Contrato en [`decisiones.md`](decisiones.md). Despliegue EP3-56 pendiente |
+| Tomar, asignar/reasignar y listar funcionarios | parcial | requests, BFF | [PR requests 25](https://github.com/CEOAlmaloco/ms-barriodigital-requests/pull/25), [PR BFF 28](https://github.com/CEOAlmaloco/ms-barriodigital-bff/pull/28). Rutas Gateway en [PR infra 68](https://github.com/CEOAlmaloco/barriodigital-infra/pull/68). UI de bandeja (EP3-47) abierta |
+| Listado paginado, orden y búsqueda | parcial | requests, BFF | [PR requests 26](https://github.com/CEOAlmaloco/ms-barriodigital-requests/pull/26), [PR BFF 28](https://github.com/CEOAlmaloco/ms-barriodigital-bff/pull/28) |
+| Matriz de capacidades por rol (EP3-04) en el BFF | parcial | BFF | Contrato [PR infra 50](https://github.com/CEOAlmaloco/barriodigital-infra/pull/50); proxy roles/asignación [PR BFF 28](https://github.com/CEOAlmaloco/ms-barriodigital-bff/pull/28). Frontend Admin/Auditor en trámites (EP3-49) abierto |
+| Cancelación por el vecino | parcial | requests | [PR 29](https://github.com/CEOAlmaloco/ms-barriodigital-requests/pull/29), contrato [PR infra 59](https://github.com/CEOAlmaloco/barriodigital-infra/pull/59) |
+| Encuesta de satisfacción | parcial | requests | [PR 30](https://github.com/CEOAlmaloco/ms-barriodigital-requests/pull/30), contrato [PR infra 60](https://github.com/CEOAlmaloco/barriodigital-infra/pull/60) |
+| Preferencias de aviso del usuario | parcial | requests | [PR 31](https://github.com/CEOAlmaloco/ms-barriodigital-requests/pull/31), contrato [PR infra 61](https://github.com/CEOAlmaloco/barriodigital-infra/pull/61) |
+| Correo `email.rejected` con motivo y folio en notify | parcial | requests, notify | [PR requests 32](https://github.com/CEOAlmaloco/ms-barriodigital-requests/pull/32), [PR notify 9](https://github.com/CEOAlmaloco/ms-barriodigital-notify/pull/9) |
+
+## Kafka, outbox y administración (EP3)
+
+| Funcionalidad | Estado | Componente | Evidencia |
+|---|---|---|---|
+| Clúster Kafka local (3 ZK + 3 brokers + UI) | implementada | infra | [PR 53](https://github.com/CEOAlmaloco/barriodigital-infra/pull/53) |
+| Clúster Kafka en EC2 (`ec2-kafka`) | implementada | infra | [PR 56](https://github.com/CEOAlmaloco/barriodigital-infra/pull/56), evidencias en [`evidencias/EP3-15-ec2-kafka.md`](evidencias/EP3-15-ec2-kafka.md) |
+| Outbox + relay a `requests.events` | parcial | requests | [PR 27](https://github.com/CEOAlmaloco/ms-barriodigital-requests/pull/27), [PR 28](https://github.com/CEOAlmaloco/ms-barriodigital-requests/pull/28). Broker en lab; flujo E2E EP3-56 abierto |
+| kafka-admin: tópicos, groups, DLT, replay, audit | parcial | kafka-admin, BFF | PRs [1](https://github.com/CEOAlmaloco/ms-barriodigital-kafka-admin/pull/1)–[10](https://github.com/CEOAlmaloco/ms-barriodigital-kafka-admin/pull/10); proxy BFF [PR 29](https://github.com/CEOAlmaloco/ms-barriodigital-bff/pull/29). En el lab, sin redeploy del BFF, `/api/kafka/*` respondió 404 |
+| Publicar cambios de catalog/mq-admin en `audit.timeline` | parcial | catalog, mq-admin | [PR catalog 16](https://github.com/CEOAlmaloco/ms-barriodigital-catalog/pull/16)/[17](https://github.com/CEOAlmaloco/ms-barriodigital-catalog/pull/17), [PR mq-admin 7](https://github.com/CEOAlmaloco/ms-barriodigital-mq-admin/pull/7) |
+| Compose apps con report, audit y kafka-admin | parcial | infra | [PR 67](https://github.com/CEOAlmaloco/barriodigital-infra/pull/67). Falta levantar y validar el stack en EP3-56 |
+| Rutas Gateway kafka/report/audit + `X-Source-Ip` | parcial | infra, API Gateway | [PR 68](https://github.com/CEOAlmaloco/barriodigital-infra/pull/68). Evidencias [`ep3-55-gateway-401.txt`](evidencias/ep3-55-gateway-401.txt) / [`ep3-55-gateway-403.txt`](evidencias/ep3-55-gateway-403.txt). 401/403 OK; proxies del BFF en EC2 aún sin EP3-44 |
+
+## Report y audit (servicios)
+
+| Funcionalidad | Estado | Componente | Evidencia |
+|---|---|---|---|
+| report: consumidor + KPIs + plazos | parcial | report | [PR 2](https://github.com/CEOAlmaloco/ms-barriodigital-report/pull/2), [PR 3](https://github.com/CEOAlmaloco/ms-barriodigital-report/pull/3), [PR 4](https://github.com/CEOAlmaloco/ms-barriodigital-report/pull/4). Contrato API [PR infra 55](https://github.com/CEOAlmaloco/barriodigital-infra/pull/55) |
+| audit: consumidor `audit.timeline` | parcial | audit | [PR 3](https://github.com/CEOAlmaloco/ms-barriodigital-audit/pull/3). API timeline / consumidor `requests.events` (EP3-40/42) aún no cerrados en merge |
+| Proxy BFF `/api/report`, `/api/audit`, `/api/kafka` | parcial | BFF | [PR 29](https://github.com/CEOAlmaloco/ms-barriodigital-bff/pull/29). Mergeado en `develop`; jar en EC2 sin redeploy → 404 por Gateway |
+
+## Reportería y Auditoría (pantallas)
+
+| Funcionalidad | Estado | Componente | Evidencia |
+|---|---|---|---|
+| Pantalla de Reportería | parcial | frontend | Sigue el placeholder de [PR 101](https://github.com/CEOAlmaloco/frontend-barriodigital/pull/101): texto de “cuando se implemente Kafka”, sin KPIs ni polling. Backend report en `develop` (PRs arriba). UI real: [EP3-50](https://github.com/CEOAlmaloco/frontend-barriodigital/issues/160) abierto |
+| Pantalla de Auditoría | parcial | frontend | Sigue el scaffold de [PR 102](https://github.com/CEOAlmaloco/frontend-barriodigital/pull/102): sin búsqueda ni timeline. UI real: [EP3-51](https://github.com/CEOAlmaloco/frontend-barriodigital/issues/161) abierto |
