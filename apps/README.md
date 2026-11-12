@@ -1,10 +1,10 @@
-# apps/ — ec2-apps (BFF + requests + catalog + notify + mq-admin)
+# apps/ — ec2-apps (BFF + requests + catalog + notify + mq-admin + kafka-admin + report + audit)
 
 Compose del mundo **apps** (una EC2). Cada microservicio trae su propio `Dockerfile` en su repo.
 
 ## Local (repos hermanos)
 
-Desde esta carpeta, con los repositorios de BFF, requests, catalog, notify y mq-admin al mismo nivel que `barriodigital-infra`. El arranque y la recuperación habituales utilizan Docker Compose.
+Desde esta carpeta, con los repositorios de BFF, requests, catalog, notify, mq-admin, kafka-admin, report y audit al mismo nivel que `barriodigital-infra`. El arranque y la recuperación habituales utilizan Docker Compose.
 
 Requiere Docker con Compose y soporte `--wait`, credenciales Oracle, wallet de Autonomous y configuración
 Entra del BFF. Para la primera configuración, crear los entornos desde las plantillas versionadas:
@@ -38,9 +38,9 @@ curl -i http://localhost:8081/actuator/health
 
 ## EC2 (layout plano `~/barriodigital`)
 
-Usar `compose.ec2.yml` cuando BFF, requests, catalog, notify, mq-admin, wallet y `.env` viven juntos. Catalog se construye antes y el BFF espera su health: si se recrea el BFF con catalog caído, el alta responde 503.
+Usar `compose.ec2.yml` cuando BFF, requests, catalog, notify, mq-admin, kafka-admin, report, audit, wallet y `.env` viven juntos. Catalog se construye antes y el BFF espera su health: si se recrea el BFF con catalog caído, el alta responde 503.
 
-Los archivos son independientes: no combinar ambos con `-f`. Añadir también los repos de Notify y mq-admin al layout plano. Configurar `RABBIT_ADDRESSES` con el DNS o IP privada de EC2-MQ y AMQP accesible desde EC2-Apps. No sirven `localhost` ni los nombres Docker de otro host. La configuración remota actual ofrece solo el endpoint del nodo 1, sin failover al nodo 2. No se añade una red bridge entre EC2 distintas.
+Los archivos son independientes: no combinar ambos con `-f`. Añadir también los repos de Notify, mq-admin, kafka-admin, report y audit al layout plano. Configurar `RABBIT_ADDRESSES` con el DNS o IP privada de EC2-MQ y AMQP accesible desde EC2-Apps. Configurar `KAFKA_BOOTSTRAP_SERVERS` con la IP privada de EC2-Kafka (`:9092,:9093,:9094`). No sirven `localhost` ni los nombres Docker de otro host. La configuración remota actual ofrece solo el endpoint del nodo 1 de MQ, sin failover al nodo 2. No se añade una red bridge entre EC2 distintas.
 
 Para preparar ese layout desde un clon limpio, situarse en el directorio que contiene los repositorios
 hermanos, incluido `barriodigital-infra`. Copiar los archivos versionados para la primera configuración:
@@ -80,6 +80,11 @@ Plantilla en `.env.example`; los valores de Entra ID están en `../docs/decision
 | `REQUESTS_BASE_URL` | `http://requests:8081`. El compose se la pasa al BFF |
 | `CATALOG_BASE_URL` | `http://catalog:8082`. El compose se la pasa al BFF. Catalog usa las mismas `ORACLE_*` y el mismo wallet |
 | `MQ_ADMIN_BASE_URL` | `http://mq-admin:8084`. El compose se la pasa al BFF. mq-admin no publica puerto |
+| `KAFKA_ADMIN_BASE_URL` | `http://kafka-admin:8085`. Solo `expose` |
+| `REPORT_BASE_URL` | `http://report:8086`. Solo `expose` |
+| `AUDIT_BASE_URL` | `http://audit:8087`. Solo `expose` |
+| `KAFKA_BOOTSTRAP_SERVERS` | Brokers para requests, report, audit y kafka-admin. Local: `KAFKA_HOST_IP:9092,9093,9094` (IP LAN, no `localhost`). EC2: IP privada de EC2-Kafka |
+| `INTERNAL_TOKEN` | Token compartido BFF ↔ mq-admin y kafka-admin (`X-Internal-Token`). Sin valor real en git |
 | `RABBIT_ADDRESSES`, `RABBIT_USER`, `RABBIT_PASSWORD` | Se pasan explícitamente a Requests y Notify. Local: nodos de la red MQ; EC2: endpoint privado del nodo 1 |
 | `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD`, `RABBITMQ_MANAGEMENT_URL`, `RABBITMQ_VHOST` | Solo mq-admin. Local: `rabbitmq-1`, `5672`, `http://rabbitmq-1:15672`, `/`. EC2: DNS o IP privada de EC2-MQ. Usuario y password deben coincidir con los de MQ |
 | `RABBIT_NETWORK_NAME` | Solo local: red externa MQ compartida por Requests, Notify y mq-admin |
@@ -91,10 +96,13 @@ Plantilla en `.env.example`; los valores de Entra ID están en `../docs/decision
 - **catalog, 8082.** Solo `expose`, sin `ports`. No se abre en el security group. El health se mira dentro del contenedor: `docker compose exec catalog curl -f http://localhost:8082/actuator/health`.
 - **notify, 8083.** Solo `expose`, sin `ports`, rutas públicas, BFF ni API Gateway. `docker compose exec notify curl -fsS http://localhost:8083/actuator/health`.
 - **mq-admin, 8084.** Solo `expose`, sin `ports`. El BFF lo llama por `MQ_ADMIN_BASE_URL`. `docker compose exec mq-admin curl -fsS http://localhost:8084/actuator/health`.
+- **kafka-admin, 8085.** Solo `expose`, sin `ports`. El BFF lo llama por `KAFKA_ADMIN_BASE_URL`.
+- **report, 8086.** Solo `expose`, sin `ports`. El BFF lo llama por `REPORT_BASE_URL`.
+- **audit, 8087.** Solo `expose`, sin `ports`. El BFF lo llama por `AUDIT_BASE_URL`.
 
-## Límites de memoria (EP3-16)
+## Límites de memoria (EP3-16 / EP3-54)
 
-La EC2 de apps es una `t3.medium` (~4 GiB). Los dos compose fijan `mem_limit` por servicio y `JAVA_TOOL_OPTIONS=-Xmx...` para que la JVM no crezca sin tope. Presupuesto total de límites: **2688 MB** con los 5 servicios actuales y **3200 MB** reservando kafka-admin; quedan ~500 MB para el SO, Docker y picos de GC.
+La EC2 de apps es una `t3.medium` (~4 GiB). Los dos compose fijan `mem_limit` por servicio y `JAVA_TOOL_OPTIONS=-Xmx...` para que la JVM no crezca sin tope. Presupuesto total de límites: **4096 MB** con los 8 servicios (ajusto al tope de la instancia; vigilar swap/picos o subir de tamaño si hace falta).
 
 | Servicio | `mem_limit` | `-Xmx` |
 |---|---|---|
@@ -103,9 +111,11 @@ La EC2 de apps es una `t3.medium` (~4 GiB). Los dos compose fijan `mem_limit` po
 | notify | 512m | 384m |
 | bff | 512m | 384m |
 | mq-admin | 384m | 256m |
-| kafka-admin (reservado, EP3-17+) | 512m | 384m |
+| kafka-admin | 512m | 384m |
+| report | 512m | 384m |
+| audit | 384m | 256m |
 
-`requests` es el más pesado (Oracle + RabbitMQ). `mq-admin` es el más liviano. Cuando entre kafka-admin al compose se usan los valores reservados; si luego llegan report o audit, hay que repartir el margen restante o evaluar una instancia más grande.
+`requests` es el más pesado (Oracle + RabbitMQ + Kafka). `mq-admin` y `audit` son los más livianos.
 
 Medición con `docker stats --no-stream` en la EC2 de apps (`t3.medium`, 3839 MB), 5-nov-2026. El compose de despliegue usa `JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=65.0 -XX:+ExitOnOutOfMemoryError` (heap ~65% del límite, equivalente al `-Xmx` de los compose versionados).
 
