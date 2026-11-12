@@ -1,0 +1,136 @@
+﻿{
+    "Items": [
+        {
+            "ConnectionType": "INTERNET",
+            "IntegrationId": "261a5re",
+            "IntegrationMethod": "ANY",
+            "IntegrationType": "HTTP_PROXY",
+            "IntegrationUri": "http://3.92.161.52:8080/api/catalog/{proxy}",
+            "PayloadFormatVersion": "1.0",
+            "RequestParameters": {
+                "overwrite:header.X-Source-Ip": "$context.identity.sourceIp"
+            },
+            "TimeoutInMillis": 29000
+        },
+        {
+            "ConnectionType": "INTERNET",
+            "IntegrationId": "28y7g65",
+            "IntegrationMethod": "ANY",
+            "IntegrationType": "HTTP_PROXY",
+            "IntegrationUri": "http://3.92.161.52:8080/{proxy}",
+            "PayloadFormatVersion": "1.0",
+            "RequestParameters": {
+                "overwrite:header.X-Source-Ip": "$context.identity.sourceIp"
+            },
+            "TimeoutInMillis": 29000
+        },
+        {
+            "ConnectionType": "INTERNET",
+            "IntegrationId": "2ungxld",
+            "IntegrationMethod": "ANY",
+            "IntegrationType": "HTTP_PROXY",
+            "IntegrationUri": "http://3.92.161.52:8080/api/requests/assignees",
+            "PayloadFormatVersion": "1.0",
+            "RequestParameters": {
+                "overwrite:header.X-Source-Ip": "$context.identity.sourceIp"
+            },
+            "TimeoutInMillis": 30000
+        },
+        {
+            "ConnectionType": "INTERNET",
+            "IntegrationId": "3fkl4f9",
+            "IntegrationMethod": "ANY",
+            "IntegrationType": "HTTP_PROXY",
+            "IntegrationUri": "http://3.92.161.52:8080/api/mq/{proxy}",
+            "PayloadFormatVersion": "1.0",
+            "RequestParameters": {
+                "overwrite:header.X-Source-Ip": "$context.identity.sourceIp"
+            },
+            "TimeoutInMillis": 29000
+        },
+        {
+            "ConnectionType": "INTERNET",
+            "IntegrationId": "8bgd519",
+            "IntegrationMethod": "ANY",
+            "IntegrationType": "HTTP_PROXY",
+            "IntegrationUri": "http://3.92.161.52:8080/api/audit/{proxy}",
+            "PayloadFormatVersion": "1.0",
+            "RequestParameters": {
+                "overwrite:header.X-Source-Ip": "$context.identity.sourceIp"
+            },
+            "TimeoutInMillis": 30000
+        },
+        {
+            "ConnectionType": "INTERNET",
+            "IntegrationId": "b0loqsp",
+            "IntegrationMethod": "ANY",
+            "IntegrationType": "HTTP_PROXY",
+            "IntegrationUri": "http://3.92.161.52:8080/api/requests/{id}/status",
+            "PayloadFormatVersion": "1.0",
+            "RequestParameters": {
+                "overwrite:header.X-Source-Ip": "$context.identity.sourceIp"
+            },
+            "TimeoutInMillis": 29000
+        },
+        {
+            "ConnectionType": "INTERNET",
+            "IntegrationId": "cwqqswm",
+            "IntegrationMethod": "ANY",
+            "IntegrationType": "HTTP_PROXY",
+            "IntegrationUri": "http://3.92.161.52:8080/api/requests/{id}/take",
+            "PayloadFormatVersion": "1.0",
+            "RequestParameters": {
+                "overwrite:header.X-Source-Ip": "$context.identity.sourceIp"
+            },
+            "TimeoutInMillis": 30000
+        },
+        {
+            "ConnectionType": "INTERNET",
+            "IntegrationId": "j89wuqs",
+            "IntegrationMethod": "ANY",
+            "IntegrationType": "HTTP_PROXY",
+            "IntegrationUri": "http://3.92.161.52:8080/api/requests/{id}/assignee",
+            "PayloadFormatVersion": "1.0",
+            "RequestParameters": {
+                "overwrite:header.X-Source-Ip": "$context.identity.sourceIp"
+            },
+            "TimeoutInMillis": 30000
+        },
+        {
+            "ConnectionType": "INTERNET",
+            "IntegrationId": "mw4f7vp",
+            "IntegrationMethod": "ANY",
+            "IntegrationType": "HTTP_PROXY",
+            "IntegrationUri": "http://3.92.161.52:8080/api/requests/meta/transitions",
+            "PayloadFormatVersion": "1.0",
+            "RequestParameters": {
+                "overwrite:header.X-Source-Ip": "$context.identity.sourceIp"
+            },
+            "TimeoutInMillis": 29000
+        },
+        {
+            "ConnectionType": "INTERNET",
+            "IntegrationId": "pxm740p",
+            "IntegrationMethod": "ANY",
+            "IntegrationType": "HTTP_PROXY",
+            "IntegrationUri": "http://3.92.161.52:8080/api/report/{proxy}",
+            "PayloadFormatVersion": "1.0",
+            "RequestParameters": {
+                "overwrite:header.X-Source-Ip": "$context.identity.sourceIp"
+            },
+            "TimeoutInMillis": 30000
+        },
+        {
+            "ConnectionType": "INTERNET",
+            "IntegrationId": "qugtm9t",
+            "IntegrationMethod": "ANY",
+            "IntegrationType": "HTTP_PROXY",
+            "IntegrationUri": "http://3.92.161.52:8080/api/kafka/{proxy}",
+            "PayloadFormatVersion": "1.0",
+            "RequestParameters": {
+                "overwrite:header.X-Source-Ip": "$context.identity.sourceIp"
+            },
+            "TimeoutInMillis": 30000
+        }
+    ]
+}

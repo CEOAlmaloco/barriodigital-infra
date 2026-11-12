@@ -1,0 +1,30 @@
+﻿------------------------------------------------------------------------
+|                               GetRoutes                              |
++------+--------------------------------------+------------------------+
+| Auth |              RouteKey                |        Target          |
++------+--------------------------------------+------------------------+
+|  JWT |  PUT /{proxy+}                       |  integrations/28y7g65  |
+|  JWT |  POST /api/mq/{proxy+}               |  integrations/3fkl4f9  |
+|  JWT |  GET /api/audit/{proxy+}             |  integrations/8bgd519  |
+|  JWT |  GET /{proxy+}                       |  integrations/28y7g65  |
+|  JWT |  GET /api/report/{proxy+}            |  integrations/pxm740p  |
+|  JWT |  PATCH /api/kafka/{proxy+}           |  integrations/qugtm9t  |
+|  JWT |  PUT /api/catalog/{proxy+}           |  integrations/261a5re  |
+|  JWT |  GET /api/requests/assignees         |  integrations/2ungxld  |
+|  JWT |  POST /api/catalog/{proxy+}          |  integrations/261a5re  |
+|  JWT |  GET /api/kafka/{proxy+}             |  integrations/qugtm9t  |
+|  JWT |  POST /{proxy+}                      |  integrations/28y7g65  |
+|  JWT |  POST /api/kafka/{proxy+}            |  integrations/qugtm9t  |
+|  JWT |  PATCH /{proxy+}                     |  integrations/28y7g65  |
+|  JWT |  PUT /api/requests/{id}/status       |  integrations/b0loqsp  |
+|  JWT |  PUT /api/mq/{proxy+}                |  integrations/3fkl4f9  |
+|  JWT |  GET /api/requests/meta/transitions  |  integrations/mw4f7vp  |
+|  JWT |  DELETE /api/mq/{proxy+}             |  integrations/3fkl4f9  |
+|  JWT |  DELETE /api/kafka/{proxy+}          |  integrations/qugtm9t  |
+|  JWT |  DELETE /{proxy+}                    |  integrations/28y7g65  |
+|  JWT |  PUT /api/kafka/{proxy+}             |  integrations/qugtm9t  |
+|  JWT |  GET /api/catalog/{proxy+}           |  integrations/261a5re  |
+|  JWT |  POST /api/requests/{id}/take        |  integrations/cwqqswm  |
+|  JWT |  PUT /api/requests/{id}/assignee     |  integrations/j89wuqs  |
+|  JWT |  GET /api/mq/{proxy+}                |  integrations/3fkl4f9  |
++------+--------------------------------------+------------------------+
