@@ -2822,7 +2822,7 @@ Un trámite cerrado se evalúa por fecha, con la misma regla:
 
 Un trámite sin plazo no es ni cumplido ni fuera de plazo.
 
-Un trámite **`CANCELADO`** también se cierra: escribe `closedAt` y el plazo se detiene. No es ni cumplido ni fuera de plazo, porque nadie lo resolvió ni lo rechazó, así que no entra en el cumplimiento.
+Un trámite **`CANCELADO`** también se cierra: escribe `closedAt` y el plazo se detiene. Si tenía plazo queda en `NO_APLICA`: no es ni cumplido ni fuera de plazo, porque nadie lo resolvió ni lo rechazó, así que no entra en el cumplimiento. Sin plazo sigue en `SIN_PLAZO`.
 
 ### 3. Calendario de feriados
 
@@ -2842,9 +2842,9 @@ Solo report calcula plazos, así que el calendario vive solo en report. requests
 El cálculo depende de **todos los años que cruza el conteo**, no solo del año del alta. Con un tope de 120 días hábiles, un conteo puede pasar al año siguiente.
 
 Si el calendario no cubre algún año del conteo:
-1. ese tramo se calcula solo con sábados y domingos. Es conservador: la fecha sale igual o más temprana que la correcta, así que el aviso nunca llega tarde;
+1. ese tramo se calcula solo con sábados y domingos. La fecha sale igual o más temprana que la correcta: el aviso nunca llega tarde, pero un cierre de ese tramo puede evaluarse `FUERA_DE_PLAZO` sin serlo (límite 3);
 2. report registra `WARN calendario-feriados-incompleto year=2028`;
-3. el health de report lo muestra en un componente informativo, como el componente `outbox` de requests, sin cambiar su estado `UP`. Report no falla al arrancar por un archivo desactualizado, porque la reportería no es el core.
+3. el health de report lo muestra en el componente informativo `sla`, siempre `UP`, con los años cubiertos y los que faltaron. Su detalle se ve sin autorización en el grupo `/actuator/health/sla`; el health general mantiene `when_authorized`, porque incluye la base de datos. Report no falla al arrancar por un archivo desactualizado, porque la reportería no es el core.
 
 #### 3.3 Recálculo al arrancar
 
@@ -2869,6 +2869,7 @@ Un solo campo para todo el ciclo de vida:
 | Abierto | `VENCIDO` | "Vencido" | D es posterior a `dueDate` |
 | Cerrado | `CUMPLIDO` | "Cumplido" | Sección 2.3 |
 | Cerrado | `FUERA_DE_PLAZO` | "Fuera de plazo" | Sección 2.3 |
+| Cerrado | `NO_APLICA` | "No aplica" | Cancelado con plazo (sección 2.3) |
 | Sin plazo | `SIN_PLAZO` | "Sin plazo" | `slaBusinessDays` nulo, abierto o cerrado |
 
 Una proyección parcial (sección 6.1) tiene `sla_status` en `null`, que significa "sin dato", distinto de `SIN_PLAZO`. EP3-07 define cómo se muestra en la API.
@@ -2908,8 +2909,8 @@ Con N = 2: si `dueDate` es viernes, los días 1, 2 y 3 son viernes, jueves y mi�
 | Momento | Qué hace |
 |---|---|
 | Al proyectar `request.created` | Con plazo: calcula `dueDate`, `dueSoonDate` y `slaStatus`. Sin plazo: `SIN_PLAZO` |
-| Al proyectar un cierre | Escribe `closedAt`. Si el trámite tiene `dueDate` y se cerró en `RESUELTO` o `RECHAZADO`, escribe `CUMPLIDO` o `FUERA_DE_PLAZO`; la cancelación sigue la sección 2.3. Un trámite `SIN_PLAZO` sigue en `SIN_PLAZO`, y una proyección parcial sigue con `sla_status` nulo |
-| Al arrancar | Recálculo de la sección 3.3, después el `UPDATE` de estado, y recién entonces se inicia el listener |
+| Al proyectar un cierre | Escribe `closedAt`, vuelve a calcular `dueDate` con el calendario cargado y, si se cerró en `RESUELTO` o `RECHAZADO`, escribe `CUMPLIDO` o `FUERA_DE_PLAZO`; la cancelación sigue la sección 2.3. Un resultado ya evaluado no se recalcula. Un trámite `SIN_PLAZO` sigue en `SIN_PLAZO`, y una proyección parcial sigue con `sla_status` nulo |
+| Al arrancar | Evaluación de las altas con `sla_status` nulo, proyectadas antes de que report calculara plazos; recálculo de la sección 3.3; `UPDATE` de estado, y recién entonces se inicia el listener |
 | Todos los días a las 00:05 en `America/Santiago` | El `UPDATE` de estado |
 
 Cumple K8: los vencimientos se calculan con un `@Scheduled`, sin evento adicional, y la API de report lee proyecciones ya materializadas.
@@ -2930,18 +2931,19 @@ WHERE closed_at IS NULL AND due_date IS NOT NULL
 - **Mueve los estados en las dos direcciones.** Si el recálculo posterga `dueDate` a una fecha más tardía, por un feriado nuevo o por un año que faltaba, un trámite `VENCIDO` puede volver a `POR_VENCER` o a `DENTRO_DE_PLAZO`, y uno `POR_VENCER` puede volver a `DENTRO_DE_PLAZO`. Con una sentencia por estado, ninguna condición lo devolvería.
 - `due_date IS NOT NULL` deja fuera, de forma explícita, a los trámites sin plazo y a las proyecciones parciales.
 
-**Horario de verano:** en septiembre, Chile adelanta el reloj de las 24:00 del sábado a la 01:00 del domingo, y ese domingo no existen las 00:05. No afecta, porque ningún estado cambia en domingo: un estado solo cambia en un día cuyo día anterior fue hábil, y `VENCIDO` empieza el día siguiente a una `dueDate`, que siempre es hábil. No hace falta una segunda ejecución.
+**Horario de verano:** en septiembre, Chile adelanta el reloj de las 24:00 del sábado a la 01:00 del domingo, y ese domingo no existen las 00:05. No afecta, porque ningún estado cambia en domingo: un estado solo cambia en un día cuyo día anterior fue hábil, y `VENCIDO` empieza el día siguiente a una `dueDate`, que siempre es hábil. Spring no ejecuta el job ese domingo, porque la hora no existe, y no hace falta una segunda ejecución.
 
 #### 5.2 Escrituras sin pérdidas
 
 Tres procesos escriben la misma proyección: el listener, el recálculo al arrancar y el job diario. La regla es: **el listener bloquea la fila, y los procesos derivados escriben solo sus columnas.**
 
-1. **El listener lee la proyección con `PESSIMISTIC_WRITE`** (`findByIdForUpdate`), dentro de su transacción. Al proyectar un cierre lee `dueDate` para evaluar el resultado, y solo el bloqueo protege esa lectura: si el recálculo llegó primero, el listener espera y lee la fila corregida; si el listener llegó primero, el recálculo espera. `@DynamicUpdate` no alcanza, porque no protege la lectura.
+1. **El listener lee la proyección con `PESSIMISTIC_WRITE`** (`findByIdForUpdate`), dentro de su transacción. Al proyectar un cierre vuelve a calcular `dueDate` antes de evaluar, así un recálculo fallido al arrancar no deja una evaluación con la fecha vieja; el bloqueo ordena al listener con el recálculo: si el recálculo llegó primero, el listener espera; si el listener llegó primero, el recálculo espera y el `WHERE` lo deja fuera si el trámite se cerró. `@DynamicUpdate` no alcanza, porque no protege la lectura.
 2. **El recálculo al arrancar** recorre los trámites abiertos con `created_at` y `sla_business_days` no nulos. Así deja fuera a los trámites sin plazo y a las proyecciones parciales, que no tienen desde dónde contar. Escribe con un `UPDATE` acotado por trámite (`@Modifying`), que solo toca `due_date` y `due_soon_date`, con `WHERE id = :id AND closed_at IS NULL`. **Cada trámite va en su propia transacción**, y se recorren por `id` ascendente. Va un `UPDATE` por trámite porque contar días hábiles necesita el calendario en Java.
 3. **El job diario** escribe con el `UPDATE` de estado sobre el conjunto de la sección 5.1.
 4. **Ningún proceso derivado lee la fila, la modifica en Java y la guarda completa.** En Oracle, un `UPDATE` que encuentra la fila cambiada por otra transacción vuelve a evaluar el `WHERE`: un trámite cerrado entremedio ya no cumple `closed_at IS NULL` y no se toca.
-5. **El listener parte con `autoStartup=false`** y se inicia al terminar el recálculo y el `UPDATE` de estado. Ordena el arranque. Lo que garantiza la corrección son las reglas 1 a 4.
-6. **Dos instancias** (la prueba de balanceo de EP3-36) corren las dos el recálculo y el job. No hace falta un bloqueo distribuido: el recálculo y el `UPDATE` de estado dan el mismo resultado si corren dos veces, y el bloqueo del listener cubre el recálculo de una instancia contra el listener de la otra.
+5. **El listener parte con `autoStartup=false`** y se inicia al terminar la evaluación de pendientes, el recálculo y el `UPDATE` de estado. Ordena el arranque. Lo que garantiza la corrección son las reglas 1 a 4. Si uno de esos pasos falla, el listener se inicia igual, porque detenerlo congelaría la proyección; el fallo queda en el log (`plazos-preparacion-incompleta`) y en el componente `sla` del health, y lo corrige el siguiente arranque.
+6. **La evaluación de pendientes** escribe con un `UPDATE` acotado por trámite que solo toca `due_date`, `due_soon_date` y `sla_status`, con `WHERE id = :id AND sla_status IS NULL`: un trámite que el listener evaluó entremedio no se toca.
+7. **Dos instancias** (la prueba de balanceo de EP3-36) corren las dos los procesos derivados. No hace falta un bloqueo distribuido: la evaluación de pendientes, el recálculo y el `UPDATE` de estado dan el mismo resultado si corren dos veces, y el bloqueo del listener cubre el recálculo de una instancia contra el listener de la otra.
 
 #### 5.3 Deadlocks
 
@@ -3029,7 +3031,6 @@ La fila "Ver el estado del plazo" de la matriz de EP3-04 sigue en No para el Vec
 4. **Sin pausas** (por diseño): si el trámite espera una respuesta del vecino, por ejemplo una gestión con resultado `NO_CONTESTA`, el plazo sigue corriendo. Mejora futura: suspensión con motivo.
 5. **Entre las 00:00 y las 00:05**, un trámite que acaba de vencer se ve con el estado del día anterior.
 6. **El Vecino ve el plazo en días, no la fecha** (por plazo). Mejora futura: que el BFF obtenga el trámite de requests, que controla la propiedad, y después la `dueDate` de report por `requestId`.
-7. **`slaStatus` de un trámite cancelado:** está por definir en el cálculo de plazos (EP3-38).
 
 ## Contrato: APIs de report y audit (EP3-07)
 
@@ -3124,7 +3125,7 @@ El tramo actual va incompleto. Cualquier otro valor de `range` responde 400. El 
 | `activeByStatus` | Trámites abiertos por estado, con los cuatro estados abiertos siempre presentes (`INGRESADO`, `ADMITIDO`, `EN_GESTION`, `EN_TERRENO`), en 0 si no hay. Es una foto del momento y **no depende de `range`** |
 | `averageResolutionHours` | Promedio de `closedAt − createdAt`, en horas con un decimal, de los trámites **resueltos** (`RESUELTO`) con `closedAt` en la ventana. Un rechazo no es una resolución. `null` si no hubo ninguno |
 | `resolvedCount` | Cuántos trámites entraron en ese promedio |
-| `slaCompliance` | `{ rate, onTime, late }`. `onTime` y `late` cuentan los trámites con `closedAt` en la ventana y `slaStatus` `CUMPLIDO` o `FUERA_DE_PLAZO`. `rate` es `onTime / (onTime + late)`, con 4 decimales, o `null` si el denominador es 0. Los trámites `SIN_PLAZO` no cuentan (EP3-06, sección 6.2) |
+| `slaCompliance` | `{ rate, onTime, late }`. `onTime` y `late` cuentan los trámites con `closedAt` en la ventana y `slaStatus` `CUMPLIDO` o `FUERA_DE_PLAZO`. `rate` es `onTime / (onTime + late)`, con 4 decimales, o `null` si el denominador es 0. Los trámites `SIN_PLAZO` y `NO_APLICA` no cuentan (EP3-06, secciones 2.3 y 6.2) |
 | `lastEventAt` | Sección 3.2 |
 
 ```json
@@ -3173,7 +3174,7 @@ Altas por tipo de trámite en la ventana. `limit` va de 1 a 20, con 5 por defect
 | Parámetro | Regla |
 |---|---|
 | `status` | `VENCIDO`, `POR_VENCER` o los dos. Por defecto, los dos. Los demás `slaStatus` no son alertas y responden 400 |
-| `assignee` | Opcional. `me` usa el `X-User-Id` que reenvía el BFF: para el Admin y el Auditor devuelve una lista vacía, porque nunca son responsables (EP3-05, sección 8). `none` devuelve los trámites sin responsable. Otro valor, 400 |
+| `assignee` | Opcional. `me` usa el `X-User-Id` que reenvía el BFF: para el Admin y el Auditor devuelve una lista vacía, porque nunca son responsables (EP3-05, sección 8), y también sin `X-User-Id`: nunca se convierte en un listado sin filtro. `none` devuelve los trámites sin responsable. Otro valor, 400 |
 | `page`, `size` | Sección 2.1 |
 
 Solo considera trámites abiertos con `slaStatus` en los valores pedidos, que por construcción tienen `dueDate` (EP3-06, sección 5.1).
@@ -3188,7 +3189,7 @@ Cubre los bloques de `/inicio` de EP3-04, sección 7: el Funcionario usa `assign
 
 `GET /api/report/sla/batch?requestIds=<uuid>,<uuid>,...`
 
-1. **Entrada:** de 1 a 50 UUID, sin repetir. 50 es el `size` máximo del listado de requests (EP3-30), así una página completa entra en una sola consulta. Con 50 UUID, la URL tiene menos de 2 KB.
+1. **Entrada:** de 1 a 50 UUID, sin repetir. Un UUID en mayúsculas se normaliza a minúsculas, como lo guarda requests, y cuenta como repetido de su par. 50 es el `size` máximo del listado de requests (EP3-30), así una página completa entra en una sola consulta. Con 50 UUID, la URL tiene menos de 2 KB.
 2. **Salida:** un ítem por cada `requestId` pedido, en el mismo orden, con `requestId`, `slaStatus` y `dueDate`, más `lastEventAt`.
 3. **Un trámite que report no tiene, o que tiene solo como proyección parcial,** responde con `slaStatus: null` y `dueDate: null`, no con 404. Quien consulta es staff, que ve todos los trámites, así que no se revela nada.
 
