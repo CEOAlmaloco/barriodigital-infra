@@ -1034,7 +1034,7 @@ Todos los eventos de los dos tópicos comparten el mismo sobre.
 
 No se deben unificar estos nombres con los de EP2-01.
 
-**`sequence`.** Se obtiene de la columna `event_sequence` de `outbox_events`, que es identity con `ORDER` (la columna no se llama `sequence` porque es palabra clave de Oracle; EP3-02). El relay la incorpora al sobre en el momento de publicar, porque el número se conoce recién al insertar la fila en el outbox. Garantiza el orden real de los eventos de un mismo trámite (EP3-02). Los consumidores que mantienen el estado actual de un trámite ignoran un evento con `sequence` menor al último aplicado para ese trámite, sin dejar de contarlo en las métricas históricas.
+**`sequence`.** Se obtiene de la columna `event_sequence` de `outbox_events`, que es identity con `ORDER` (la columna no se llama `sequence` porque es palabra clave de Oracle; EP3-02). El relay la incorpora al sobre en el momento de publicar, porque el número se conoce recién al insertar la fila en el outbox. Garantiza el orden real de los eventos de un mismo trámite (EP3-02). Los consumidores que mantienen el estado actual de un trámite ignoran un evento con `sequence` menor al último aplicado para ese trámite, sin dejar de contarlo en las métricas históricas. En report, la comparación es por aspecto del trámite (EP3-02, sección 9.3).
 
 **`traceId`.** Lo genera cada productor como un UUID al iniciar la operación. En requests, el evento de Kafka y los comandos de RabbitMQ que salen del mismo cambio comparten el mismo `traceId`. Un evento reprocesado desde la DLT conserva el suyo.
 
@@ -1529,7 +1529,7 @@ Una tarea diaria a las 03:30 en `America/Santiago`:
 | Tabla | Servicio | Qué borra |
 |---|---|---|
 | `outbox_events` | requests | Solo eventos **publicados** con `published_at` de más de 7 días. Un evento sin publicar no se borra nunca, aunque sea antiguo |
-| `processed_events` | report | Registros con más de 30 días |
+| `processed_events` | report | Registros del consumidor `report` con más de 30 días |
 | Tabla de auditoría | audit | Nada. Es el registro histórico definitivo |
 
 Los 30 días de `processed_events` cubren el tiempo en que un duplicado puede llegar a report. El replay desde una DLT vuelve a `requests.events`, así que el peor caso es 2 × 7 + 14 = 28 días (EP3-01, sección 2, "Regla entre retenciones").
@@ -1682,12 +1682,14 @@ WARN evento-desconocido topic=requests.events consumidor=audit eventType=request
 
 | Servicio | Tabla | Restricción | Columnas |
 |---|---|---|---|
-| report | `processed_events` | `pk_processed_events`, clave primaria (`consumer`, `event_id`) | `consumer` VARCHAR2(40), `event_id` VARCHAR2(36), `processed_at` TIMESTAMP |
+| report | `processed_events` | `pk_processed_events`, clave primaria (`consumer`, `event_id`) | `consumer` VARCHAR2(40), `event_id` VARCHAR2(36), `processed_at` TIMESTAMP WITH TIME ZONE |
 | audit | Tabla de auditoría | `uk_audit_entries_event_id`, única sobre `event_id` | La propia fila de auditoría |
 
 En report, la fila de `processed_events` y la actualización de los KPI van en **la misma transacción**: o se cuenta el evento y se marca como procesado, o ninguna de las dos cosas. En audit, la fila de auditoría es a la vez el registro y la marca de idempotencia.
 
 Las restricciones llevan esos nombres explícitos en el `db/schema.sql` de cada servicio.
+
+En report, `ddl-auto: update` no sabe nombrar una clave primaria, y con otro nombre ningún duplicado se reconocería. Por eso las tablas las crea `db/report-tables.sql`, que se aplica en Oracle **antes del primer arranque**. Si Hibernate creó la tabla antes, el script renombra la clave sin tocar las filas. report no arranca si la clave tiene otro nombre.
 
 #### 9.2 Cómo se reconoce un duplicado
 
@@ -1699,8 +1701,20 @@ La detección ocurre **fuera** del método `@Transactional`: una excepción dent
 
 Un evento reprocesado desde la DLT puede llegar después de eventos más nuevos del mismo trámite.
 
-- **report:** guarda en su proyección el último `sequence` aplicado por trámite. Un evento con `sequence` menor **no modifica** el estado actual del trámite, pero **sí cuenta** en las métricas históricas (trámites por hora, tipos más demandados).
+- **report:** guarda en su proyección el último `sequence` aplicado a cada aspecto del trámite. Un evento con `sequence` menor que el de su aspecto **no modifica** ese aspecto, pero **sí cuenta** en las métricas históricas (trámites por hora, tipos más demandados). Las reglas están más abajo.
 - **audit:** guarda todos los eventos y ordena el timeline por `occurredAt`, así que el atraso no le afecta.
+
+**Aspectos en report.** Se compara por aspecto y no por trámite: con un solo `sequence`, una encuesta (sequence 6) aplicada antes del replay de un `RESUELTO` (sequence 5) haría ignorar el cierre, y el trámite quedaría abierto para siempre en los KPIs.
+
+| Aspecto | Eventos | Columna |
+|---|---|---|
+| Estado | `request.created` (`INGRESADO`), `request.status-changed`, `request.cancelled` | `status_sequence` |
+| Responsable | `request.assigned` | `assignee_sequence` |
+
+1. **Un evento atrasado para su aspecto no lo modifica.** Un evento de otro aspecto no lo bloquea.
+2. **Los hechos con fecha fija se completan si faltan, aunque el evento llegue atrasado.** Son los datos del alta (`created_at`, tipo, label, sector, coordenadas, `sla_business_days`) y `closed_at`.
+3. **`last_sequence` y `last_event_at`** guardan el mayor `sequence` y el mayor `occurredAt` aplicados, y no retroceden.
+4. **`request.contact-logged` y `request.rated`** no cambian el estado ni el responsable: solo actualizan `last_sequence` y `last_event_at`, o crean la proyección parcial.
 
 ### 10. Límites conocidos
 
@@ -2781,7 +2795,7 @@ El plazo corre **desde el alta**, no desde la admisión:
 - es el compromiso con el vecino, que espera desde que ingresó su solicitud;
 - evita un incentivo perverso: con la admisión como inicio, demorarla detendría el reloj, y la espera por cupo agotado no contaría.
 
-El **inicio** depende de un solo evento, `request.created`. Para detener el plazo, report usa además `request.status-changed`, ordenado por `sequence` (EP3-02, sección 9.3).
+El **inicio** depende de un solo evento, `request.created`. Para detener el plazo, report usa además `request.status-changed` y `request.cancelled`, ordenados por `sequence` (EP3-02, sección 9.3).
 
 #### 2.2 Reglas de conteo
 
@@ -2790,7 +2804,7 @@ El **inicio** depende de un solo evento, `request.created`. Para detener el plaz
 3. **El conteo parte el día hábil siguiente** al día del alta, o al día en que se entiende hecha.
 4. **`dueDate` es el día hábil número N** del conteo, con N = `slaBusinessDays`. Es una fecha (`LocalDate`) en `America/Santiago`, no un instante. Como solo se cuentan días hábiles, `dueDate` siempre es hábil, y la prórroga del art. 25 cuando el último día es inhábil ocurre sola.
 5. **Las reglas 2 y 3 usan el mismo calendario** de la sección 3. Nadie implementa "inhábil = sábado o domingo" en una parte y con feriados en la otra.
-6. **Sin pausas.** El plazo corre en todos los estados abiertos y se detiene en `RESUELTO` o `RECHAZADO`.
+6. **Sin pausas.** El plazo corre en todos los estados abiertos y se detiene en `RESUELTO`, `RECHAZADO` o `CANCELADO` (sección 2.3).
 7. **Se mide con la hora del hecho**, el `occurredAt`, no con la llegada a Kafka (EP3-01, sección 4). Un evento atrasado por el outbox no mueve el plazo.
 
 Ejemplos, con un plazo de 5 días y sin feriados en esa semana:
@@ -2807,6 +2821,8 @@ Un trámite cerrado se evalúa por fecha, con la misma regla:
 - **`FUERA_DE_PLAZO`:** es posterior.
 
 Un trámite sin plazo no es ni cumplido ni fuera de plazo.
+
+Un trámite **`CANCELADO`** también se cierra: escribe `closedAt` y el plazo se detiene. No es ni cumplido ni fuera de plazo, porque nadie lo resolvió ni lo rechazó, así que no entra en el cumplimiento.
 
 ### 3. Calendario de feriados
 
@@ -2882,7 +2898,7 @@ Con N = 2: si `dueDate` es viernes, los días 1, 2 y 3 son viernes, jueves y mi�
 | `slaBusinessDays` | `sla_business_days` | Snapshot del plazo, tomado de `request.created`. Es la base del recálculo |
 | `dueDate` | `due_date` | Sección 2.2 |
 | `dueSoonDate` | `due_soon_date` | Sección 4.3 |
-| `closedAt` | `closed_at` | `occurredAt` del cambio a `RESUELTO` o `RECHAZADO` |
+| `closedAt` | `closed_at` | `occurredAt` del cambio a `RESUELTO`, `RECHAZADO` o `CANCELADO` (sección 2.3) |
 | `slaStatus` | `sla_status` | Sección 4.1 |
 
 ### 5. Cálculo y concurrencia
@@ -2892,7 +2908,7 @@ Con N = 2: si `dueDate` es viernes, los días 1, 2 y 3 son viernes, jueves y mi�
 | Momento | Qué hace |
 |---|---|
 | Al proyectar `request.created` | Con plazo: calcula `dueDate`, `dueSoonDate` y `slaStatus`. Sin plazo: `SIN_PLAZO` |
-| Al proyectar un cierre | Escribe `closedAt`. Si el trámite tiene `dueDate`, escribe `CUMPLIDO` o `FUERA_DE_PLAZO`. Un trámite `SIN_PLAZO` sigue en `SIN_PLAZO`, y una proyección parcial sigue con `sla_status` nulo |
+| Al proyectar un cierre | Escribe `closedAt`. Si el trámite tiene `dueDate` y se cerró en `RESUELTO` o `RECHAZADO`, escribe `CUMPLIDO` o `FUERA_DE_PLAZO`; la cancelación sigue la sección 2.3. Un trámite `SIN_PLAZO` sigue en `SIN_PLAZO`, y una proyección parcial sigue con `sla_status` nulo |
 | Al arrancar | Recálculo de la sección 3.3, después el `UPDATE` de estado, y recién entonces se inicia el listener |
 | Todos los días a las 00:05 en `America/Santiago` | El `UPDATE` de estado |
 
@@ -2910,7 +2926,7 @@ SET sla_status = CASE
 WHERE closed_at IS NULL AND due_date IS NOT NULL
 ```
 
-- `:hoy` es la fecha actual en `America/Santiago`. El nombre de la tabla es ilustrativo: lo fija EP3-36.
+- `:hoy` es la fecha actual en `America/Santiago`. La tabla es `report_request_projection`.
 - **Mueve los estados en las dos direcciones.** Si el recálculo posterga `dueDate` a una fecha más tardía, por un feriado nuevo o por un año que faltaba, un trámite `VENCIDO` puede volver a `POR_VENCER` o a `DENTRO_DE_PLAZO`, y uno `POR_VENCER` puede volver a `DENTRO_DE_PLAZO`. Con una sentencia por estado, ninguna condición lo devolvería.
 - `due_date IS NOT NULL` deja fuera, de forma explícita, a los trámites sin plazo y a las proyecciones parciales.
 
@@ -3013,6 +3029,7 @@ La fila "Ver el estado del plazo" de la matriz de EP3-04 sigue en No para el Vec
 4. **Sin pausas** (por diseño): si el trámite espera una respuesta del vecino, por ejemplo una gestión con resultado `NO_CONTESTA`, el plazo sigue corriendo. Mejora futura: suspensión con motivo.
 5. **Entre las 00:00 y las 00:05**, un trámite que acaba de vencer se ve con el estado del día anterior.
 6. **El Vecino ve el plazo en días, no la fecha** (por plazo). Mejora futura: que el BFF obtenga el trámite de requests, que controla la propiedad, y después la `dueDate` de report por `requestId`.
+7. **`slaStatus` de un trámite cancelado:** está por definir en el cálculo de plazos (EP3-38).
 
 ## Contrato: APIs de report y audit (EP3-07)
 
