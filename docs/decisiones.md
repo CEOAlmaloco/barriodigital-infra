@@ -124,7 +124,7 @@
 | EN_TERRENO | RESUELTO |
 | EN_TERRENO | RECHAZADO |
 
-RESUELTO y RECHAZADO son estados terminales, sin transiciones salientes. RECHAZADO es alcanzable desde cualquier estado no terminal, no solo desde EN_TERRENO. Política de cupo: el cupo diario reservado al pasar a ADMITIDO (ver contrato de EP1.5-03) nunca se libera automáticamente por un rechazo posterior, la orquestación de cupo de EP1.5-18 solo participa en la transición INGRESADO a ADMITIDO.
+RESUELTO, RECHAZADO y CANCELADO son estados terminales, sin transiciones salientes. RECHAZADO es alcanzable desde cualquier estado no terminal vía PUT `/status`, no solo desde EN_TERRENO. CANCELADO solo se alcanza con `POST /api/requests/{id}/cancel` (EP3-76) desde INGRESADO; no entra en la tabla de este PUT. Política de cupo: el cupo diario reservado al pasar a ADMITIDO (ver contrato de EP1.5-03) nunca se libera automáticamente por un rechazo o una cancelación posterior, la orquestación de cupo de EP1.5-18 solo participa en la transición INGRESADO a ADMITIDO.
 
 ### 2. Autorización
 
@@ -134,7 +134,7 @@ RESUELTO y RECHAZADO son estados terminales, sin transiciones salientes. RECHAZA
 
 Un Funcionario que no es el responsable, o un trámite sin responsable, responde 403. El Vecino y el Auditor reciben 403 por rol. Las reglas completas están en EP3-04, secciones 3 y 4.
 
-El Vecino no puede cancelar su propio trámite en esta versión. Si entra EP3-76 (prioridad Baja), ese contrato lo define.
+**Actualizado por EP3-76.** El Vecino titular cancela su propio trámite solo con `POST /api/requests/{id}/cancel`, y solo en `INGRESADO`. No usa este PUT. El detalle está en el contrato de EP3-76.
 
 *Antes de EP3-04, solo el Funcionario podía invocar este endpoint y el Admin recibía 403.*
 
@@ -151,7 +151,7 @@ PUT /api/requests/{id}/status
 }
 ```
 
-- `status`: obligatorio, debe ser uno de los 6 valores de `RequestStatus` (INGRESADO, ADMITIDO, EN_GESTION, EN_TERRENO, RESUELTO, RECHAZADO).
+- `status`: obligatorio, debe ser uno de los valores operables por staff (`INGRESADO`, `ADMITIDO`, `EN_GESTION`, `EN_TERRENO`, `RESUELTO`, `RECHAZADO`). `CANCELADO` no se acepta aquí: responde 400 y remite al POST de cancelación.
 - `rejectionReason`: obligatorio y no vacío únicamente cuando `status` es RECHAZADO, se ignora en cualquier otra transición. Máximo 500 caracteres.
 - `interventionReason`: obligatorio y no vacío cuando quien llama es Admin (EP3-04, sección 3). Máximo 500 caracteres. Es un motivo **interno**: nunca le llega al Vecino. Es distinto de `rejectionReason`, que sí se le comunica. Si el Admin rechaza, los dos son obligatorios. Se ignora para los demás roles.
 - Requiere identidad del caller vía header `X-User-Id`, mismo patrón ya usado en `create()` y `getById()`.
@@ -209,6 +209,63 @@ POST /api/requests/{id}/rating
 ### 4. Oracle
 
 `ddl-auto: update` agrega las columnas. El CHECK de `request_activity.kind` debe incluir `CALIFICACION`: script `db/satisfaction-rating.sql` en requests, una vez en bases ya desplegadas.
+
+## Contrato: preferencias de aviso del usuario (EP3-65)
+
+### 1. Regla
+
+Cada usuario (clave `X-User-Id`) guarda si recibe avisos por correo. **Sin fila = habilitado** (opt-out). Si `emailEnabled` es `false`, requests **no publica** comandos `email.*` a RabbitMQ para los trámites de ese titular. Los comandos `certificate.*` (comprobante/certificado PDF) y `crew.ticket` **sí se publican**.
+
+### 2. Endpoints
+
+```
+GET  /api/requests/me/notification-preferences
+PUT  /api/requests/me/notification-preferences
+```
+
+```json
+{ "emailEnabled": false }
+```
+
+Cualquier rol autenticado con identidad. 200 con el mismo cuerpo. `emailEnabled` es obligatorio en el PUT.
+
+### 3. Persistencia
+
+Tabla `user_notification_prefs` (`user_id` PK, `email_enabled`, `updated_at`). Hibernate `ddl-auto: update` la crea.
+
+### 4. Errores
+
+| Código | Causa |
+|---|---|
+| 400 | falta `X-User-Id`, o falta `emailEnabled` en el PUT |
+
+## Contrato: cancelación por el vecino (EP3-76)
+
+### 1. Decisión de estado
+
+Se crea el estado terminal **`CANCELADO`**. No se reutiliza `RECHAZADO`: el rechazo es una decisión municipal (Funcionario/Admin) con `rejectionReason`; la cancelación es del titular y no lleva motivo.
+
+### 2. Regla
+
+Solo el **Vecino titular** (`solicitanteId` = `X-User-Id`) puede cancelar, y solo si el trámite está en `INGRESADO`. Cualquier otro estado responde 409. Staff y Auditor reciben 403 por rol.
+
+### 3. Endpoint
+
+```
+POST /api/requests/{id}/cancel
+```
+
+Sin body. Responde 200 con el `RequestView` actualizado (`status: CANCELADO`). En la misma transacción: marca `ESTADO` en el historial y evento `request.cancelled` en el outbox (EP3-01 / EP3-02). No publica comandos RabbitMQ.
+
+### 4. Errores
+
+| Código | Causa |
+|---|---|
+| 400 | falta `X-User-Id` |
+| 403 | el rol no es Vecino |
+| 403 | el Vecino no es el titular |
+| 404 | el trámite no existe |
+| 409 | el trámite no está en `INGRESADO` |
 
 ## Contrato: catálogo de tipos de trámite (EP1.5-02)
 
@@ -361,6 +418,7 @@ El PUT reemplaza el cupo completo. Si el cuerpo no trae `dailyQuota`, el tipo pa
 | `email.visit` | requests | `EN_GESTION` → `EN_TERRENO` | notify | email de visita |
 | `email.resolved` | requests | `EN_TERRENO` → `RESUELTO` | notify | email de cierre |
 | `certificate.resolved` | requests | `EN_TERRENO` → `RESUELTO` | notify | certificado en PDF |
+| `email.rejected` | requests | `INGRESADO`, `ADMITIDO`, `EN_GESTION` o `EN_TERRENO` → `RECHAZADO` | notify | email de rechazo con el motivo (EP3-33) |
 
 `EN_TERRENO` publica dos eventos en el mismo cambio: `crew.ticket` y `email.visit`. `RESUELTO` publica `email.resolved` y `certificate.resolved`. Comparten el `correlationId` del trámite.
 
@@ -368,7 +426,6 @@ No publican mensaje:
 
 - Reservar o liberar cupo. El cupo de EP1.5-03 es una llamada HTTP del BFF a catalog, no un evento.
 - `ADMITIDO` → `EN_GESTION`.
-- Cualquier transición a `RECHAZADO`. En esta etapa un rechazo no avisa al vecino.
 - Una transición rechazada (409) o un alta que no se confirma. Si el commit no ocurre, no hay evento.
 
 ### 2. Sobre
@@ -377,7 +434,7 @@ Todos los mensajes usan el mismo sobre. `type` dice qué evento es. `eventId` id
 
 | Campo | Tipo | Nota |
 |---|---|---|
-| `type` | string | uno de los seis de la tabla anterior |
+| `type` | string | uno de los siete de la tabla anterior |
 | `eventId` | uuid | único por mensaje. Sirve para no procesar dos veces el mismo envío |
 | `timestamp` | instant UTC | momento de la publicación, ISO-8601 con `Z` |
 | `traceId` | uuid | seguimiento del cambio que originó el mensaje |
@@ -387,6 +444,8 @@ Todos los mensajes usan el mismo sobre. `type` dice qué evento es. `eventId` id
 `payload` lleva `requestId`, `procedureType`, `procedureLabel`, `address` y `solicitanteEmail`. `solicitanteEmail` puede venir `null` en trámites antiguos. `crew.ticket` necesita `address`. Los emails necesitan `solicitanteEmail`.
 
 **Actualización (EP3-05, 5-nov-2026):** `payload` agrega `folio` (`BD-AAAA-NNNNNN`). Puede venir `null` en mensajes publicados antes de EP3-28. Es un cambio compatible: los consumidores de notify ignoran los campos que no usan.
+
+**Actualización (EP3-33, 11-nov-2026):** `payload` agrega `rejectionReason`, el motivo que el vecino ve en su historial. Solo tiene valor en `email.rejected` y va `null` en los demás tipos. `interventionReason` del Admin **nunca** viaja en un payload de RabbitMQ (EP3-04, sección 6.3): el payload se arma desde el trámite, no desde el historial. Es un cambio compatible.
 
 ### 3. Ejemplos
 
@@ -500,6 +559,27 @@ Todos los mensajes usan el mismo sobre. `type` dice qué evento es. `eventId` id
 }
 ```
 
+`email.rejected`, al pasar a `RECHAZADO` desde cualquier estado no terminal. Lo publica un Funcionario o el Admin; si es el Admin, su `interventionReason` no aparece:
+
+```json
+{
+  "type": "email.rejected",
+  "eventId": "3e4f5a6b-7c8d-4e9f-a0b1-c2d3e4f5a6b7",
+  "timestamp": "2026-10-21T10:15:00Z",
+  "traceId": "dd44ee55-ff66-4007-8118-334455667788",
+  "correlationId": "7b6e1d44-2a18-4c90-9f01-88aa11bb22cc",
+  "payload": {
+    "requestId": "7b6e1d44-2a18-4c90-9f01-88aa11bb22cc",
+    "folio": "BD-2026-000123",
+    "procedureType": "bache",
+    "procedureLabel": "Bache en calle",
+    "address": "Los Aromos 120",
+    "solicitanteEmail": "vecino@example.com",
+    "rejectionReason": "La direccion esta fuera de la comuna"
+  }
+}
+```
+
 ### 4. Cuándo se publica
 
 La publicación ocurre después del commit, nunca dentro de la transacción y nunca en el hilo que responde el HTTP. Si el alta o el cambio de estado se revierte, no sale ningún mensaje.
@@ -510,7 +590,8 @@ El cliente de RabbitMQ usa un timeout de conexión de 2 segundos. Publicar es as
 
 - No hay outbox. Si el broker está caído en el momento de publicar, el evento se pierde. Solo queda el log. Es el costo de no hacer esperar al HTTP.
 - La idempotencia vive en la memoria de notify. Si ese proceso se reinicia, olvida los `eventId` ya vistos y puede repetir un correo o un PDF.
-- Un `RECHAZADO` no avisa al vecino.
+- Si el vecino desactivó los avisos por correo (EP3-65), `email.rejected` no se publica, igual que los demás `email.*`.
+- Mientras notify no maneje `email.rejected` (EP3-34), lo trata como tipo desconocido y lo deja en `q.cmd.email.dlq` (EP2-03). El mensaje no se pierde, pero el correo no sale. Por eso EP3-34 se despliega junto con EP3-33 o antes.
 
 ## Contrato: topología RabbitMQ (EP2-02)
 
@@ -536,7 +617,7 @@ La aplicación publica así. El otro binding de cada cola queda para probar desd
 
 | type | Exchange | Routing key |
 |---|---|---|
-| `email.admitted`, `email.visit`, `email.resolved` | `cmd.topic` | el propio `type` |
+| `email.admitted`, `email.visit`, `email.resolved`, `email.rejected` | `cmd.topic` | el propio `type` |
 | `crew.ticket` | `cmd.direct` | `crew.ticket` |
 | `certificate.receipt`, `certificate.resolved` | `cmd.topic` | el propio `type` |
 
@@ -630,7 +711,7 @@ Recuperable, subclase de `RecoverableException`:
 No recuperable, subclase de `NonRecoverableException`:
 
 - El cuerpo no es JSON o no trae el sobre (`type`, `eventId`, `payload`).
-- `type` no es uno de los seis del contrato de mensajería.
+- `type` no es uno de los siete del contrato de mensajería.
 - Falta un dato que el caso no puede inventar: `solicitanteEmail` en un email, `address` en `crew.ticket`.
 
 Un dato ausente no se reintenta. Reintentar no lo hace aparecer.
@@ -982,7 +1063,8 @@ Los publica requests. Todos son versión 1.
 | `eventType` | Cuándo |
 |---|---|
 | `request.created` | Alta del trámite, que queda en `INGRESADO` |
-| `request.status-changed` | Cualquier cambio de estado válido, incluidos `EN_GESTION` y `RECHAZADO` |
+| `request.status-changed` | Cualquier cambio de estado válido vía PUT `/status`, incluidos `EN_GESTION` y `RECHAZADO` |
+| `request.cancelled` | Cancelación del titular: `INGRESADO` → `CANCELADO` (EP3-76) |
 | `request.contact-logged` | Registro de una gestión de contacto |
 | `request.assigned` | Toma, asignación o reasignación del responsable del trámite |
 | `request.rated` | Encuesta del titular sobre un trámite `RESUELTO` (EP3-74) |
@@ -991,26 +1073,26 @@ Una transición rechazada (409) o una operación revertida no genera evento. El 
 
 **Campos del payload:**
 
-| Campo | Tipo | `created` | `status-changed` | `contact-logged` | `assigned` | `rated` |
-|---|---|---|---|---|---|---|
-| `requestId` | uuid | No nulo | No nulo | No nulo | No nulo | No nulo |
-| `folio` | string | No nulo | No nulo | No nulo | No nulo | No nulo |
-| `procedureType` | string | No nulo | No nulo | | | |
-| `procedureLabel` | string | No nulo | | | | |
-| `sector` | string | Nulo si no se indicó | Nulo si no se indicó | | | |
-| `latitude`, `longitude` | número | Ambos nulos o ambos con valor | | | | |
-| `status` | enum | Siempre `INGRESADO` | | | | |
-| `slaBusinessDays` | entero | Nulo si el tipo no tiene plazo | | | | |
-| `fromStatus`, `toStatus` | enum | | No nulos | | | |
-| `reason` | string | | Con valor solo si `toStatus` es `RECHAZADO` | | Ver regla de asignación | |
-| `interventionReason` | string | | Nulo si el actor no es Admin | Nulo si el actor no es Admin | | |
-| `channel` | enum `ContactChannel` | | | No nulo | | |
-| `result` | enum `ContactResult` | | | No nulo | | |
-| `nextAttemptAt` | instant | | | Nulo si no se programó | | |
-| `assigneeId`, `assigneeName` | string | | | | No nulos | |
-| `previousAssigneeId` | string | | | | Ver regla de asignación | |
-| `score` | entero 1..5 | | | | | No nulo |
-| `comment` | string | | | | | Nulo si no hubo comentario |
+| Campo | Tipo | `created` | `status-changed` | `cancelled` | `contact-logged` | `assigned` | `rated` |
+|---|---|---|---|---|---|---|---|
+| `requestId` | uuid | No nulo | No nulo | No nulo | No nulo | No nulo | No nulo |
+| `folio` | string | No nulo | No nulo | No nulo | No nulo | No nulo | No nulo |
+| `procedureType` | string | No nulo | No nulo | No nulo | | | |
+| `procedureLabel` | string | No nulo | | | | | |
+| `sector` | string | Nulo si no se indicó | Nulo si no se indicó | Nulo si no se indicó | | | |
+| `latitude`, `longitude` | número | Ambos nulos o ambos con valor | | | | | |
+| `status` | enum | Siempre `INGRESADO` | | | | | |
+| `slaBusinessDays` | entero | Nulo si el tipo no tiene plazo | | | | | |
+| `fromStatus`, `toStatus` | enum | | No nulos | No nulos (`INGRESADO` → `CANCELADO`) | | | |
+| `reason` | string | | Con valor solo si `toStatus` es `RECHAZADO` | | | Ver regla de asignación | |
+| `interventionReason` | string | | Nulo si el actor no es Admin | | Nulo si el actor no es Admin | | |
+| `channel` | enum `ContactChannel` | | | | No nulo | | |
+| `result` | enum `ContactResult` | | | | No nulo | | |
+| `nextAttemptAt` | instant | | | | Nulo si no se programó | | |
+| `assigneeId`, `assigneeName` | string | | | | | No nulos | |
+| `previousAssigneeId` | string | | | | | Ver regla de asignación | |
+| `score` | entero 1..5 | | | | | | No nulo |
+| `comment` | string | | | | | | Nulo si no hubo comentario |
 
 Notas por campo:
 - **`folio`:** su formato y generación se definen en EP3-05.
@@ -1073,6 +1155,29 @@ Los permisos y el motivo se definen en EP3-05.
     "toStatus": "RECHAZADO",
     "reason": "Direccion fuera de la comuna",
     "interventionReason": null
+  }
+}
+```
+
+`request.cancelled`:
+
+```json
+{
+  "eventId": "1b2c3d4e-5f60-4789-8abc-def012345678",
+  "eventType": "request.cancelled",
+  "schemaVersion": 1,
+  "occurredAt": "2026-11-11T12:10:00.000Z",
+  "producer": "requests",
+  "traceId": "bb22cc33-dd44-4ee5-8ff6-001122334455",
+  "sequence": 1060,
+  "actor": { "id": "5d2b8e61-3f4a-4c7b-9a10-2e3f4a5b6c7d", "name": "Vecino Test", "role": "Vecino" },
+  "payload": {
+    "requestId": "7b6e1d44-2a18-4c90-9f01-88aa11bb22cc",
+    "folio": "BD-2026-000123",
+    "procedureType": "bache",
+    "sector": "ralco",
+    "fromStatus": "INGRESADO",
+    "toStatus": "CANCELADO"
   }
 }
 ```
@@ -1348,6 +1453,7 @@ O quedan las tres, o ninguna. Un rollback no deja evento, y una transición rech
 | Alta | `RequestService.create` | `request.created` |
 | Cambio de estado | `RequestService.changeStatus` | `request.status-changed` |
 | Encuesta de satisfacción | `RequestService.rate` | `request.rated` |
+| Cancelación del titular | `RequestService.cancel` | `request.cancelled` |
 | Gestión de contacto | `RequestActivityService.registerGestion` | `request.contact-logged` |
 | Toma o reasignación | Asignación (EP3-29) | `request.assigned` |
 
@@ -1355,7 +1461,7 @@ O quedan las tres, o ninguna. Un rollback no deja evento, y una transición rech
 
 Toda operación que genera un evento sobre un trámite **existente** toma antes el bloqueo `PESSIMISTIC_WRITE` de su fila (`findByIdForUpdate`). Así, dos operaciones sobre el mismo trámite se ejecutan una después de la otra, y la segunda recibe un `sequence` mayor.
 
-Hoy ya lo hacen `changeStatus`, `rate` y `registerGestion`. La asignación debe hacerlo también. El alta no lo necesita porque la fila es nueva.
+Hoy ya lo hacen `changeStatus`, `rate`, `cancel` y `registerGestion`. La asignación debe hacerlo también. El alta no lo necesita porque la fila es nueva.
 
 **Cualquier operación nueva que genere eventos de un trámite debe seguir esta regla.**
 
@@ -2163,6 +2269,8 @@ Los roles son los App Roles de Entra ID: `Admin`, `Funcionario`, `Vecino` y `Aud
 | Historial | Público (sección 6) | Completo | Completo | Completo |
 | Registrar gestión | No | Solo como responsable | Sí, con motivo | No |
 | Calificar el propio trámite `RESUELTO` | Sí (titular, una vez) | No | No | No |
+| Preferencias de aviso por correo | Sí (las propias) | Sí (las propias) | Sí (las propias) | Sí (las propias) |
+| Cancelar el propio trámite en `INGRESADO` | Sí (titular) | No | No | No |
 | Cambiar estado y rechazar con motivo | No | Solo como responsable | Sí, con motivo | No |
 | Tomar un trámite sin responsable | No | Sí | No | No |
 | Asignar o reasignar | No | Solo los suyos (EP3-05) | Cualquiera | No |
