@@ -29,3 +29,13 @@ Los puertos que se ven dentro del contenedor de RabbitMQ no están abiertos a in
 | `ec2-kafka-instance.json` / `ec2-kafka-console-describe.txt` | Datos EC2 (consola/CLI) |
 | `ec2-kafka-sg.json` / `ec2-kafka-sg-table.txt` | SG: 9092–94 desde apps; UI/SSH `/32`; sin 2181 |
 | `ec2-kafka-ui.png` | Kafka UI con cluster ONLINE |
+
+## EP3-55 — API Gateway rutas + X-Source-Ip
+
+| Archivo | Qué muestra |
+|---|---|
+| `ep3-55-gateway-rutas.txt` | Rutas del HTTP API, incluidas kafka/report/audit/assignees/take/assignee |
+| `ep3-55-gateway-integrations.json` | Integraciones al BFF `3.92.161.52:8080` con `overwrite:header.X-Source-Ip` |
+| `ep3-55-gateway-401.txt` | Sin token: kafka/report/audit/assignees → 401 Unauthorized del Gateway |
+| `ep3-55-gateway-403.txt` | Funcionario con JWT en `/api/mq/queues` → 403 del BFF |
+
