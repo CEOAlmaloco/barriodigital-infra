@@ -179,6 +179,35 @@ El orden de evaluación está en EP3-04, sección 5.
 
 `application.yml` de `ms-barriodigital-requests` no tiene `server.error.include-message` seteado, el default de Spring Boot es `never`, por lo que el campo `message` del cuerpo de error venía vacío pese a que el código ya lanzaba el texto correcto. Esto afecta no solo al 409 nuevo, sino a los 400 y 404 que ya existían en `create()` y `getById()`. Se agrega `server.error.include-message: always` bajo `server:` (mismo nivel que `port`) como parte de EP1.5-04.
 
+## Contrato: preferencias de aviso del usuario (EP3-65)
+
+### 1. Regla
+
+Cada usuario (clave `X-User-Id`) guarda si recibe avisos por correo. **Sin fila = habilitado** (opt-out). Si `emailEnabled` es `false`, requests **no publica** comandos `email.*` a RabbitMQ para los trámites de ese titular. Los comandos `certificate.*` (comprobante/certificado PDF) y `crew.ticket` **sí se publican**.
+
+### 2. Endpoints
+
+```
+GET  /api/requests/me/notification-preferences
+PUT  /api/requests/me/notification-preferences
+```
+
+```json
+{ "emailEnabled": false }
+```
+
+Cualquier rol autenticado con identidad. 200 con el mismo cuerpo. `emailEnabled` es obligatorio en el PUT.
+
+### 3. Persistencia
+
+Tabla `user_notification_prefs` (`user_id` PK, `email_enabled`, `updated_at`). Hibernate `ddl-auto: update` la crea.
+
+### 4. Errores
+
+| Código | Causa |
+|---|---|
+| 400 | falta `X-User-Id`, o falta `emailEnabled` en el PUT |
+
 ## Contrato: cancelación por el vecino (EP3-76)
 
 ### 1. Decisión de estado
@@ -2183,6 +2212,7 @@ Los roles son los App Roles de Entra ID: `Admin`, `Funcionario`, `Vecino` y `Aud
 | Ver la imagen adjunta | Solo los propios | Sí | Sí | Sí |
 | Historial | Público (sección 6) | Completo | Completo | Completo |
 | Registrar gestión | No | Solo como responsable | Sí, con motivo | No |
+| Preferencias de aviso por correo | Sí (las propias) | Sí (las propias) | Sí (las propias) | Sí (las propias) |
 | Cancelar el propio trámite en `INGRESADO` | Sí (titular) | No | No | No |
 | Cambiar estado y rechazar con motivo | No | Solo como responsable | Sí, con motivo | No |
 | Tomar un trámite sin responsable | No | Sí | No | No |
