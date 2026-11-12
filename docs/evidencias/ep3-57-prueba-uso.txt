@@ -1,0 +1,18 @@
+EP3-57 — Prueba de uso de la documentación
+
+Fecha: 2026-11-12 (lab Learner Lab) / doc cerrada en rama doc/kafka-architecture.
+
+Quién escribió la guía operativa ampliada: agente + Alex (infra).
+Quién ejecutó el recorrido que la guía describe: corte EP3-56 en EC2 (par infra),
+siguiendo el orden de despliegue Kafka → kafka-admin → report/audit → requests/catalog/mq → BFF
+y las demos de KPI, IP en audit.timeline, caos de brokers/report y DLT.
+
+Resultado: operable. Evidencias hermanas:
+- ep3-56-topics.json
+- ep3-56-flujo-tramite.txt
+- ep3-56-audit-config-ip.txt
+- ep3-56-caos-kafka.txt
+- ep3-56-stack-healthy.txt
+
+La guía quedó en docs/kafka.md (secciones 3 y 4) de forma que un compañero puede repetir
+local (3.1) o nube (3.2–3.6) sin inventar endpoints: los contratos están en decisiones.md.
