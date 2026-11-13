@@ -2327,7 +2327,7 @@ Reglas que acompañan la matriz:
 | `/admin` | Admin |
 | `/reports` | Admin, Auditor |
 | `/audit` | Admin, Auditor |
-| Pantalla "sin acceso" | Sin rol o con más de un rol, con el motivo |
+| `/no-access` (pantalla "sin acceso") | Sin rol, con más de un rol o con el token sin leer, con el motivo. Fuera del layout y sin navegación. Un rol válido que entra vuelve a `/inicio` |
 
 **Roles por endpoint de report y audit** (EP3-07):
 
@@ -2485,7 +2485,7 @@ El Admin ve `/audit`, que registra sus propias acciones, y eso no debilita la se
 | **requests**, listado | Filtro `open=true\|false`, combinado con `status` por un Y lógico | EP3-30 |
 | **report** | La proyección de estado por trámite guarda `assigneeId` de `request.assigned`. El endpoint de plazos acepta `assignee=me`. Roles por endpoint | EP3-36, EP3-37, EP3-38 |
 | **audit** | Filtro `actorRole` en la búsqueda. Roles Admin y Auditor. Sin escritura | EP3-42 |
-| **frontend**, `shared/models/role.ts` | `REQUESTS_ROLES` incluye los cuatro roles | EP3-49 |
+| **frontend**, `shared/models/role.ts` | `REQUESTS_ROLES` incluye los cuatro roles. `resolveAccess` cuenta solo los cuatro roles, igual que el BFF | EP3-49 |
 | **frontend**, `app.routes.ts` y header | `/reports` y `/audit` para Admin y Auditor. Navegación del rol del usuario. Pantalla "sin acceso" con el motivo, sin rol o con más de uno | EP3-49 |
 | **frontend**, detalle | Acciones por rol y por responsable, "Tomar" como acción principal, campo de motivo para el Admin, "En atención" y "Municipalidad" para el Vecino | EP3-46 |
 | **frontend**, `/inicio` | Bloques de la sección 7 | EP3-52 |
