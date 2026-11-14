@@ -2306,14 +2306,14 @@ Los roles son los App Roles de Entra ID: `Admin`, `Funcionario`, `Vecino` y `Aud
 | Ver el estado del plazo (listado, detalle e `/inicio`) | No | Sí | Sí | Sí |
 | Administrar catálogo, cupos y plazos | No | No | Sí | No |
 | Administrar la mensajería (RabbitMQ y Kafka) | No | No | Sí | No |
-| Ver reportes (`/reports`) | No | No | Sí | Sí, solo lectura |
+| Ver reportes (`/reports`) | No | Solo el mapa de trámites | Sí | Sí, solo lectura |
 | Ver auditoría (`/audit`) | No | No | Sí | Sí |
 
 Reglas que acompañan la matriz:
 
 1. **El Admin no toma trámites, los asigna.** Así "Mis asignados" y los KPIs por funcionario reflejan atención y no supervisión, y la lista de reasignación de EP3-05 queda sin ambigüedad. El destinatario de una asignación tiene que ser un Funcionario de esa lista, y EP3-05 define el error. El Admin igual puede operar cualquier trámite como intervención (sección 3).
 2. **El Auditor no tiene acciones.** Quien fiscaliza no opera.
-3. **`/reports` es para el Admin y el Auditor.** Control interno revisa los indicadores de gestión. El Funcionario no entra a `/reports`: su vista es la bandeja, y recibe los plazos de report en el listado, el detalle e `/inicio`. Si entra EP3-62 (mapa, prioridad Media), ese contrato redefine su acceso.
+3. **Los indicadores de `/reports` son para el Admin y el Auditor.** Control interno revisa los indicadores de gestión. El Funcionario entra a `/reports` solo para el mapa de trámites (EP3-62), que le sirve para organizar el trabajo en terreno. Su vista principal sigue siendo la bandeja, y recibe los plazos de report en el listado, el detalle e `/inicio`.
 4. **Adjuntar después del alta:** nadie, en la prioridad Alta. Si entra EP3-64 (prioridad Media), el Vecino agrega fotos a un trámite abierto y ese contrato agrega su fila.
 5. **Funciones de prioridad Media y Baja** (comentario del vecino, cancelación, encuesta, exportación) agregan su fila en su propio contrato, si se cumple la fecha de corte del 17-nov.
 6. **Solo el Vecino crea.** requests también lo comprueba (principio 2): el staff que crea un trámite recibe 403 `Solo un Vecino puede crear un tramite`.
@@ -2325,7 +2325,7 @@ Reglas que acompañan la matriz:
 | `/inicio` | Los cuatro roles |
 | `/tramites` y `/tramites/:id` | Los cuatro roles |
 | `/admin` | Admin |
-| `/reports` | Admin, Auditor |
+| `/reports` | Admin y Auditor. El Funcionario, solo el mapa de trámites |
 | `/audit` | Admin, Auditor |
 | `/no-access` (pantalla "sin acceso") | Sin rol, con más de un rol o con el token sin leer, con el motivo. Fuera del layout y sin navegación. Un rol válido que entra vuelve a `/inicio` |
 
@@ -2335,6 +2335,7 @@ Reglas que acompañan la matriz:
 |---|---|
 | KPIs y tipos más demandados | Admin, Auditor |
 | Plazos (vencidos y por vencer), con filtro `assignee=me` | Funcionario, Admin, Auditor |
+| Puntos del mapa de trámites | Funcionario, Admin, Auditor |
 | Timeline de un trámite y búsqueda de eventos de auditoría, con filtro `actorRole` | Admin, Auditor |
 
 ### 3. Responsable y operación
@@ -3047,7 +3048,7 @@ La fila "Ver el estado del plazo" de la matriz de EP3-04 sigue en No para el Vec
 
 ## Contrato: APIs de report y audit (EP3-07)
 
-Define los endpoints de solo lectura de report (`/api/report/*`) y audit (`/api/audit/*`): KPIs, plazos, timeline y búsqueda de auditoría. Es la base de EP3-35 a EP3-38 (report), EP3-39 a EP3-42 (audit), EP3-44 (BFF) y EP3-50 a EP3-53 (frontend). Parte de los endpoints del caso base (`GET /api/report/kpis?range=last24h` y `GET /api/report/top-procedures?range=last7d`), de los roles de EP3-04 y de la proyección de EP3-06.
+Define los endpoints de solo lectura de report (`/api/report/*`) y audit (`/api/audit/*`): KPIs, plazos, puntos del mapa, timeline y búsqueda de auditoría. Es la base de EP3-35 a EP3-38 y EP3-61 (report), EP3-39 a EP3-42 (audit), EP3-44 (BFF) y EP3-50 a EP3-53 y EP3-62 (frontend). Parte de los endpoints del caso base (`GET /api/report/kpis?range=last24h` y `GET /api/report/top-procedures?range=last7d`), de los roles de EP3-04 y de la proyección de EP3-06.
 
 **Nombres:** los campos, parámetros y rutas van en inglés (convención 13 del backlog). Los valores de los enums de dominio van en español (`VENCIDO`, `EN_GESTION`).
 
@@ -3069,6 +3070,7 @@ Define los endpoints de solo lectura de report (`/api/report/*`) y audit (`/api/
 |---|---|
 | `GET /api/report/kpis` y `GET /api/report/top-procedures` | Admin, Auditor |
 | `GET /api/report/sla` y `GET /api/report/sla/batch` | Funcionario, Admin, Auditor |
+| `GET /api/report/map-points` | Funcionario, Admin, Auditor |
 | `GET /api/audit/timeline` y `GET /api/audit/events` | Admin, Auditor |
 
 Coincide con la tabla "Roles por endpoint de report y audit" de EP3-04, sección 2. El Vecino recibe 403 en todos: no ve el estado del plazo (EP3-04, sección 2) ni la auditoría.
@@ -3088,7 +3090,7 @@ La respuesta lleva `content`, `page`, `size`, `totalElements` y `totalPages`. En
 
 #### 2.2 Parámetros de varios valores
 
-`status` en `/api/report/sla`, `requestIds` en `/api/report/sla/batch` y `eventType` en `/api/audit/events` aceptan varios valores **separados por coma**, sin espacios. Un valor desconocido o mal formado responde 400, y un valor repetido también.
+`status` en `/api/report/sla` y `/api/report/map-points`, `requestIds` en `/api/report/sla/batch` y `eventType` en `/api/audit/events` aceptan varios valores **separados por coma**, sin espacios. Un valor desconocido o mal formado responde 400, y un valor repetido también.
 
 #### 2.3 Errores
 
@@ -3217,6 +3219,53 @@ Cubre los bloques de `/inicio` de EP3-04, sección 7: el Funcionario usa `assign
 }
 ```
 
+#### 3.8 `GET /api/report/map-points`: puntos del mapa
+
+`GET /api/report/map-points?range=last24h|last7d&status=<estados>&procedureType=<codigo>`
+
+Alimenta el mapa de trámites de EP3-62.
+
+| Parámetro | Regla |
+|---|---|
+| `range` | Sección 3.3, con `last7d` por defecto. Filtra por `createdAt` |
+| `status` | Opcional. Uno o varios de los siete estados del trámite, sobre el estado actual. Sin él, todos |
+| `procedureType` | Opcional. Un código con el formato del catálogo: de 1 a 40 caracteres entre minúsculas, dígitos, `_` y `-`. Un código bien formado que no existe responde 200 con todo en cero |
+
+Los filtros se combinan con un Y lógico y solo consideran proyecciones con `createdAt` (sección 3.1).
+
+1. **Ubicación utilizable:** un trámite la tiene si trae `latitude` y `longitude`. Si le falta cualquiera de las dos, cuenta como sin ubicación. EP3-01 ya exige que viajen juntas, y esta regla impide que una fila incompleta llegue al mapa.
+2. **`items`:** como máximo **1000** trámites con ubicación, del alta más reciente a la más antigua, y después por `requestId`. Cada ítem lleva `requestId`, `folio`, `latitude`, `longitude`, `status`, `procedureType`, `procedureLabel` y `sector`. No incluye el responsable, la dirección ni datos del vecino (EP3-01, sección 8). Un mapa necesita todos sus puntos en una sola respuesta, así que no se pagina, y el tope acota el tamaño de la respuesta y la cantidad de marcadores de Leaflet.
+3. **`locatedTotal`:** cuántos trámites con ubicación cumplen los filtros, sin tope. Si supera el largo de `items`, hubo recorte, y el frontend lo informa.
+4. **`withoutLocation`:** cuántos trámites cumplen los filtros sin ubicación utilizable.
+5. **`bySector`:** concentración por sector, con ítems `{ sector, count }`, calculada sobre **todos** los trámites que cumplen los filtros: con ubicación y sin ella, incluidos los que el tope dejó fuera de `items`. La suma de los `count` es `locatedTotal + withoutLocation`. Los trámites sin sector forman un ítem con `sector: null`. Orden: por `count` descendente y después por `sector` por code point. El ítem `null` va siempre al final, aunque tenga el `count` más alto. Se ordena en el servicio, por la misma razón de la sección 3.5.
+6. **Una sola foto:** las consultas de una respuesta corren en una transacción de solo lectura con aislamiento serializable. Un evento que llega entremedio no descuadra `items`, los totales ni `bySector`.
+7. **Roles:** Funcionario, Admin y Auditor. El Funcionario ya ve todos los trámites (EP3-04, sección 2). El mapa le sirve para organizar el trabajo en terreno y no le muestra indicadores de gestión.
+
+```json
+{
+  "range": "last7d",
+  "items": [
+    {
+      "requestId": "7b6e1d44-2a18-4c90-9f01-88aa11bb22cc",
+      "folio": "BD-2026-000123",
+      "latitude": -37.9946,
+      "longitude": -71.4962,
+      "status": "EN_GESTION",
+      "procedureType": "bache",
+      "procedureLabel": "Bache en calle",
+      "sector": "Centro"
+    }
+  ],
+  "locatedTotal": 1,
+  "withoutLocation": 2,
+  "bySector": [
+    { "sector": "Centro", "count": 2 },
+    { "sector": null, "count": 1 }
+  ],
+  "lastEventAt": "2026-11-10T14:58:12.004Z"
+}
+```
+
 ### 4. El plazo en el listado y el detalle
 
 **El frontend combina las dos fuentes**, no el BFF:
@@ -3316,6 +3365,7 @@ Un valor fuera de esas listas responde 400, así el frontend puede usar listas d
 | `folio` con otro formato | `folio debe tener el formato BD-AAAA-NNNNNN` |
 | `requestId` y `folio` juntos, o ninguno | `Indica requestId o folio, solo uno` |
 | `actorRole`, `resourceType` o `eventType` desconocido | `<filtro> no es valido`, por ejemplo `eventType no es valido` |
+| `status` o `procedureType` no válido en `/api/report/map-points` | `status no es valido` o `procedureType no es valido` |
 | `from` o `to` mal formado | `from y to deben ser instantes ISO-8601` |
 | `from` posterior a `to` | `from no puede ser posterior a to` |
 | Valor repetido en un parámetro de varios valores | `<parametro> tiene valores repetidos` |
@@ -3328,14 +3378,17 @@ Un valor fuera de esas listas responde 400, así el frontend puede usar listas d
 | **report**, consumidor | Proyección por trámite con `last_event_at` y los índices de la sección 3.1, sin contadores | EP3-36 |
 | **report**, KPIs | `kpis` y `top-procedures` (secciones 3.3 a 3.5), con la consulta portable del label, la comprobación del rol y el cuerpo de error de la sección 2.3 | EP3-37 |
 | **report**, plazos | Listado y consulta por lote (secciones 3.6 y 3.7), con la misma comprobación del rol y el mismo cuerpo de error | EP3-38 |
+| **report**, mapa | Puntos, totales y concentración por sector (sección 3.8), con la misma comprobación del rol y el mismo cuerpo de error | EP3-61 |
 | **audit**, base | Puerto 8087 | EP3-39 |
 | **audit**, consumidores | Normalización de la sección 5.1, `sequence` y `summary` | EP3-40, EP3-41 |
 | **audit**, API | Timeline y búsqueda (secciones 5.3 y 5.4), con la comprobación del rol y el cuerpo de error | EP3-42 |
 | **BFF** | Proxy de `/api/report/**` y `/api/audit/**` con los roles de la sección 1, `REPORT_BASE_URL` y `AUDIT_BASE_URL`, y 503 si el servicio no responde | EP3-44 |
+| **BFF** | Autorización y reenvío de `GET /api/report/map-points` | EP3-61 |
 | **frontend** | Columna de plazo en el listado y el detalle, con la consulta por lote y sus tres situaciones (sección 4) | EP3-53 |
 | **frontend** | Reportería con `kpis` y `top-procedures`, y "datos al" con `lastEventAt` | EP3-50 |
 | **frontend** | Auditoría con la búsqueda y el timeline por folio | EP3-51 |
 | **frontend** | Bloques de `/inicio` con el listado de plazos y la búsqueda de intervenciones | EP3-52 |
+| **frontend** | Mapa de trámites en `/reports`, con los totales, el aviso de recorte y la concentración por sector de la sección 3.8. El Funcionario entra solo al mapa | EP3-62 |
 
 **Cambios en otros contratos:**
 
