@@ -280,6 +280,124 @@ Sin body. Responde 200 con el `RequestView` actualizado (`status: CANCELADO`). E
 | 404 | el trámite no existe |
 | 409 | el trámite no está en `INGRESADO` |
 
+## Contrato: comentario y fotos del vecino (EP3-64)
+
+### 1. Regla
+
+Solo el **Vecino titular** comenta, y solo en un trámite **abierto**: no en `RESUELTO`, `RECHAZADO` ni `CANCELADO`. Cada comentario lleva:
+- `text` **obligatorio**, de 1 a 500 caracteres sin contar los espacios de los extremos;
+- **una imagen opcional** JPEG o PNG, que se valida y se vuelve a codificar sin metadatos como en el alta (máximo 5 MB, 6000 px por lado y 12 MP).
+
+Un trámite admite **20 comentarios** como máximo.
+
+El comentario queda como marca `COMENTARIO` `PUBLICO` del historial, que ven el titular y el personal. El texto va en `note` y el `summary` es fijo: "Agregó un comentario" o "Agregó un comentario con una foto". No cambia el estado, el responsable ni los tiempos del expediente.
+
+**Por qué el texto es obligatorio:** una foto sin contexto no le dice al funcionario qué cambió.
+
+**Por qué hay un tope:** cada foto puede ocupar 5 MB en Oracle. Veinte comentarios bastan para aportar antecedentes y acotan el abuso.
+
+### 2. Transacción y concurrencia
+
+Todo ocurre en una sola transacción y después del bloqueo `PESSIMISTIC_WRITE` del trámite (EP3-02, sección 2.3): se valida el estado y el tope, y se guardan la marca, la imagen y el evento `request.citizen-comment` en el outbox. Un rechazo no deja nada.
+
+**El tope se cuenta bajo el bloqueo.** Si un trámite tiene 19 comentarios y llegan dos a la vez, se ejecutan uno después del otro, y el segundo recibe 409.
+
+No se publican comandos RabbitMQ: un comentario no envía correo.
+
+### 3. Endpoints
+
+```
+POST /api/requests/{id}/comments
+```
+
+Acepta dos formatos, igual que el alta:
+- `application/json`, con este cuerpo:
+
+  ```json
+  { "text": "El bache creció y ahora se acumula agua" }
+  ```
+- `multipart/form-data`, con la parte `comment` (el mismo JSON) y la parte opcional `attachment` (la imagen).
+
+Responde 201 con el `ActividadView` del trámite, como `POST /gestiones`. Cada evento del historial suma `hasAttachment` (boolean), que es `true` solo en un comentario con foto.
+
+```
+GET /api/requests/{id}/comments/{commentId}/attachment
+```
+
+`commentId` es el `id` del evento en el historial. Las reglas de acceso y los headers son los de `GET /{id}/attachment`: acceden el titular y el personal, y cualquier otro Vecino recibe 404.
+
+La imagen se devuelve solo si **el comentario pertenece a ese trámite y tiene foto**. Un `commentId` de otro trámite, uno sin foto o uno inexistente responden 404, aunque quien pide tenga acceso a los dos trámites. Oracle garantiza la misma relación con una FK compuesta (sección 5).
+
+### 4. Errores
+
+`POST`, en el orden en que se evalúan. La imagen se valida primero, como en el alta:
+
+| Código | Causa |
+|---|---|
+| 400 / 413 | la imagen no es un JPEG o PNG válido, o excede las dimensiones (400); supera 5 MB (413) |
+| 400 | falta `X-User-Id` |
+| 403 | el rol no es Vecino |
+| 400 | `text` vacío o de más de 500 caracteres |
+| 404 | el trámite no existe |
+| 403 | el Vecino no es el titular |
+| 409 | el trámite está cerrado |
+| 409 | el trámite ya tiene 20 comentarios |
+
+`GET`: 400 si falta `X-User-Id`, y 404 si el trámite no existe, no es visible para quien pide, el comentario no pertenece al trámite o no tiene foto.
+
+### 5. Oracle
+
+El script `db/citizen-comment.sql` de requests corre **antes de desplegar** esta versión. Se puede volver a correr: crea lo que falta y se detiene ante una restricción con el nombre esperado y otra definición.
+1. Amplía el CHECK de `request_activity.kind` con `COMENTARIO`.
+2. Agrega `request_activity.has_attachment NUMBER(1) DEFAULT 0 NOT NULL`, con un CHECK de 0 o 1.
+3. Agrega `uk_request_activity_request UNIQUE (id, request_id)`, que es el destino de la FK compuesta.
+4. Crea `request_activity_attachments`:
+
+| Columna | Tipo | Nulo | Nota |
+|---|---|---|---|
+| `activity_id` | VARCHAR2(36) | No | PK: una imagen por comentario |
+| `request_id` | VARCHAR2(36) | No | |
+| `attachment_data` | BLOB | No | La imagen ya sanitizada |
+| `content_type` | VARCHAR2(30) | No | CHECK: `image/jpeg` o `image/png` |
+| `file_name` | VARCHAR2(40) | No | |
+| `created_at` | TIMESTAMP WITH TIME ZONE | No | |
+
+La FK `(activity_id, request_id)` → `request_activity (id, request_id)` impide guardar una imagen con un trámite distinto al de su comentario.
+
+**Por qué antes del despliegue:** sin el CHECK ampliado, el primer comentario falla con ORA-02290. Además, `ddl-auto: update` no crea la UNIQUE ni la FK compuesta.
+
+La imagen del alta sigue en `municipal_request_attachments`, sin cambios.
+
+### 6. Evento
+
+`request.citizen-comment` lleva `requestId`, `folio` y `hasAttachment` (EP3-01, sección 6). No lleva el texto ni la imagen, por minimización (EP3-01, sección 8).
+
+### 7. Orden de despliegue
+
+audit y report deben soportar el tipo **antes** de que requests lo emita. Si requests se adelanta, los dos lo tratan como desconocido (EP3-01, sección 10): registran un WARN y confirman el offset. Ese evento no pasa por la DLT, así que no se puede reprocesar.
+
+Orden:
+1. Script Oracle.
+2. audit y report.
+3. requests.
+
+### 8. Capas
+
+| Capa | Cambio | Issue |
+|---|---|---|
+| **requests** | Endpoints, marca, imagen y evento | EP3-64 |
+| **audit** | Registra `request.citizen-comment` y lo acepta en el filtro `eventType` | EP3-64 |
+| **report** | Lo trata como actividad: no cambia ningún indicador (EP3-02, sección 9.3) | EP3-64 |
+| **BFF** | Ruta solo para el Vecino, con el multipart y la descarga | EP3-69 |
+| **frontend** | Formulario en el detalle y la foto en la línea de tiempo | EP3-71 |
+
+### 9. Límites conocidos
+
+1. **Sin edición ni borrado:** el historial es append-only. Un error se corrige con otro comentario.
+2. **Una imagen por comentario.**
+3. **Sin aviso al responsable:** el funcionario ve el comentario al abrir el trámite.
+4. **El tope cuenta comentarios, no bytes:** un trámite puede llegar a 20 imágenes de 5 MB.
+
 ## Contrato: exportación CSV del listado (EP3-63)
 
 ### 1. Regla
@@ -1135,31 +1253,33 @@ Los publica requests. Todos son versión 1.
 | `request.contact-logged` | Registro de una gestión de contacto |
 | `request.assigned` | Toma, asignación o reasignación del responsable del trámite |
 | `request.rated` | Encuesta del titular sobre un trámite `RESUELTO` (EP3-74) |
+| `request.citizen-comment` | Comentario del titular, con o sin foto, en un trámite abierto (EP3-64) |
 
 Una transición rechazada (409) o una operación revertida no genera evento. El evento se escribe en el outbox dentro de la misma transacción del cambio (EP3-02).
 
 **Campos del payload:**
 
-| Campo | Tipo | `created` | `status-changed` | `cancelled` | `contact-logged` | `assigned` | `rated` |
-|---|---|---|---|---|---|---|---|
-| `requestId` | uuid | No nulo | No nulo | No nulo | No nulo | No nulo | No nulo |
-| `folio` | string | No nulo | No nulo | No nulo | No nulo | No nulo | No nulo |
-| `procedureType` | string | No nulo | No nulo | No nulo | | | |
-| `procedureLabel` | string | No nulo | | | | | |
-| `sector` | string | Nulo si no se indicó | Nulo si no se indicó | Nulo si no se indicó | | | |
-| `latitude`, `longitude` | número | Ambos nulos o ambos con valor | | | | | |
-| `status` | enum | Siempre `INGRESADO` | | | | | |
-| `slaBusinessDays` | entero | Nulo si el tipo no tiene plazo | | | | | |
-| `fromStatus`, `toStatus` | enum | | No nulos | No nulos (`INGRESADO` → `CANCELADO`) | | | |
-| `reason` | string | | Con valor solo si `toStatus` es `RECHAZADO` | | | Ver regla de asignación | |
-| `interventionReason` | string | | Nulo si el actor no es Admin | | Nulo si el actor no es Admin | | |
-| `channel` | enum `ContactChannel` | | | | No nulo | | |
-| `result` | enum `ContactResult` | | | | No nulo | | |
-| `nextAttemptAt` | instant | | | | Nulo si no se programó | | |
-| `assigneeId`, `assigneeName` | string | | | | | No nulos | |
-| `previousAssigneeId` | string | | | | | Ver regla de asignación | |
-| `score` | entero 1..5 | | | | | | No nulo |
-| `comment` | string | | | | | | Nulo si no hubo comentario |
+| Campo | Tipo | `created` | `status-changed` | `cancelled` | `contact-logged` | `assigned` | `rated` | `citizen-comment` |
+|---|---|---|---|---|---|---|---|---|
+| `requestId` | uuid | No nulo | No nulo | No nulo | No nulo | No nulo | No nulo | No nulo |
+| `folio` | string | No nulo | No nulo | No nulo | No nulo | No nulo | No nulo | No nulo |
+| `procedureType` | string | No nulo | No nulo | No nulo | | | | |
+| `procedureLabel` | string | No nulo | | | | | | |
+| `sector` | string | Nulo si no se indicó | Nulo si no se indicó | Nulo si no se indicó | | | | |
+| `latitude`, `longitude` | número | Ambos nulos o ambos con valor | | | | | | |
+| `status` | enum | Siempre `INGRESADO` | | | | | | |
+| `slaBusinessDays` | entero | Nulo si el tipo no tiene plazo | | | | | | |
+| `fromStatus`, `toStatus` | enum | | No nulos | No nulos (`INGRESADO` → `CANCELADO`) | | | | |
+| `reason` | string | | Con valor solo si `toStatus` es `RECHAZADO` | | | Ver regla de asignación | | |
+| `interventionReason` | string | | Nulo si el actor no es Admin | | Nulo si el actor no es Admin | | | |
+| `channel` | enum `ContactChannel` | | | | No nulo | | | |
+| `result` | enum `ContactResult` | | | | No nulo | | | |
+| `nextAttemptAt` | instant | | | | Nulo si no se programó | | | |
+| `assigneeId`, `assigneeName` | string | | | | | No nulos | | |
+| `previousAssigneeId` | string | | | | | Ver regla de asignación | | |
+| `score` | entero 1..5 | | | | | | No nulo | |
+| `comment` | string | | | | | | Nulo si no hubo comentario | |
+| `hasAttachment` | boolean | | | | | | | No nulo |
 
 Notas por campo:
 - **`folio`:** su formato y generación se definen en EP3-05.
@@ -1266,6 +1386,26 @@ Los permisos y el motivo se definen en EP3-05.
     "folio": "BD-2026-000123",
     "score": 5,
     "comment": "Rapido"
+  }
+}
+```
+
+`request.citizen-comment`:
+
+```json
+{
+  "eventId": "3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f",
+  "eventType": "request.citizen-comment",
+  "schemaVersion": 1,
+  "occurredAt": "2026-11-12T15:30:00.000Z",
+  "producer": "requests",
+  "traceId": "dd44ee55-ff66-4007-8112-233445566778",
+  "sequence": 1075,
+  "actor": { "id": "5d2b8e61-3f4a-4c7b-9a10-2e3f4a5b6c7d", "name": "Vecino Test", "role": "Vecino" },
+  "payload": {
+    "requestId": "7b6e1d44-2a18-4c90-9f01-88aa11bb22cc",
+    "folio": "BD-2026-000123",
+    "hasAttachment": true
   }
 }
 ```
@@ -1412,6 +1552,7 @@ Cada evento lleva solo lo que sus consumidores necesitan, en línea con los prin
 | Correo del solicitante | No | report y audit no envían correos. Los correos siguen por RabbitMQ (EP2-01) |
 | Dirección textual | No | Ningún consumidor la necesita. El análisis geográfico usa `sector` y coordenadas |
 | Nota libre de una gestión | No | Puede contener datos personales del contacto. Se conservan `channel` y `result` |
+| Texto e imagen de un comentario del vecino | No | Pueden contener datos personales y ningún consumidor los necesita. Se conserva `hasAttachment` |
 | Motivo de rechazo y de reasignación | Sí | Explica la decisión. Es parte de la trazabilidad que pide la auditoría |
 | Motivo de intervención del Admin | Sí | Explica por qué el Admin operó un trámite. Es la trazabilidad que el Auditor fiscaliza. Viaja solo en Kafka: nunca en RabbitMQ, los correos ni los PDF (EP3-04, sección 6) |
 | Coordenadas | Sí | Ubican el problema (un bache, una luminaria), no a la persona. Alimentan el mapa de reportes |
@@ -1521,6 +1662,7 @@ O quedan las tres, o ninguna. Un rollback no deja evento, y una transición rech
 | Cambio de estado | `RequestService.changeStatus` | `request.status-changed` |
 | Encuesta de satisfacción | `RequestService.rate` | `request.rated` |
 | Cancelación del titular | `RequestService.cancel` | `request.cancelled` |
+| Comentario del titular | `RequestActivityService.comment` | `request.citizen-comment` |
 | Gestión de contacto | `RequestActivityService.registerGestion` | `request.contact-logged` |
 | Toma o reasignación | Asignación (EP3-29) | `request.assigned` |
 
@@ -1528,7 +1670,7 @@ O quedan las tres, o ninguna. Un rollback no deja evento, y una transición rech
 
 Toda operación que genera un evento sobre un trámite **existente** toma antes el bloqueo `PESSIMISTIC_WRITE` de su fila (`findByIdForUpdate`). Así, dos operaciones sobre el mismo trámite se ejecutan una después de la otra, y la segunda recibe un `sequence` mayor.
 
-Hoy ya lo hacen `changeStatus`, `rate`, `cancel` y `registerGestion`. La asignación debe hacerlo también. El alta no lo necesita porque la fila es nueva.
+Hoy ya lo hacen `changeStatus`, `rate`, `cancel`, `registerGestion` y `comment`. La asignación debe hacerlo también. El alta no lo necesita porque la fila es nueva.
 
 **Cualquier operación nueva que genere eventos de un trámite debe seguir esta regla.**
 
@@ -1781,7 +1923,7 @@ Un evento reprocesado desde la DLT puede llegar después de eventos más nuevos 
 1. **Un evento atrasado para su aspecto no lo modifica.** Un evento de otro aspecto no lo bloquea.
 2. **Los hechos con fecha fija se completan si faltan, aunque el evento llegue atrasado.** Son los datos del alta (`created_at`, tipo, label, sector, coordenadas, `sla_business_days`) y `closed_at`.
 3. **`last_sequence` y `last_event_at`** guardan el mayor `sequence` y el mayor `occurredAt` aplicados, y no retroceden.
-4. **`request.contact-logged` y `request.rated`** no cambian el estado ni el responsable: solo actualizan `last_sequence` y `last_event_at`, o crean la proyección parcial.
+4. **`request.contact-logged`, `request.rated` y `request.citizen-comment`** no cambian el estado ni el responsable: solo actualizan `last_sequence` y `last_event_at`, o crean la proyección parcial.
 
 ### 10. Límites conocidos
 
