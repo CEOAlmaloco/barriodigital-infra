@@ -1,5 +1,22 @@
 # Decisiones del proyecto
 
+## Índice de contratos EP3 (versión de corte)
+
+| Id | Título en este archivo |
+|---|---|
+| EP3-01 | Contrato: tópicos y eventos Kafka |
+| EP3-02 | Contrato: publicación y consumo de eventos Kafka |
+| EP3-03 | Contrato: API de kafka-admin |
+| EP3-04 | Contrato: capacidades por rol |
+| EP3-05 | Contrato: folio y asignación |
+| EP3-06 | Contrato: plazos en días hábiles |
+| EP3-07 | Contrato: APIs de report y audit |
+| EP3-65 | Contrato: preferencias de aviso del usuario |
+| EP3-74 | Contrato: encuesta de satisfacción |
+| EP3-76 | Contrato: cancelación por el vecino |
+
+Guía operativa de Kafka: `docs/kafka.md`. Arquitectura: `docs/arquitectura.md`.
+
 ## Microsoft Entra ID: App Registration "BarrioDigital"
 
 - Tenant ID: ce6e98c4-63f0-4b79-83e5-20925b5fada2

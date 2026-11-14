@@ -1,7 +1,7 @@
-# Arquitectura EP1 — BarrioDigital
+# Arquitectura — BarrioDigital
 
-Recorte de la **Prueba 1** tal como quedó desplegado: login Microsoft, front en Amplify, API Gateway con JWT Authorizer, BFF y trámites en Oracle.  
-Lo que sigue (EP2+) está al final. Las URLs concretas viven en `decisiones.md`.
+EP1 (login → Gateway → BFF → requests → Oracle) más el recorte EP2/EP3 de mensajería: RabbitMQ, Kafka, report, audit y kafka-admin.  
+URLs y contratos: `decisiones.md`. Kafka operativo: `docs/kafka.md`.
 
 ## Vista en 30 segundos
 
@@ -91,16 +91,73 @@ Contrato resumido (detalle en `decisiones.md`):
 - Roles en claim `roles`
 - Scope API: `api://…/access_as_user`
 
-## Qué NO entra en este dibujo (EP2+)
+## EP2/EP3 — mensajería y proyección
 
-- Catalog completo, cambio de estado avanzado, Rabbit/Kafka
+```mermaid
+flowchart TB
+  subgraph Front["Front"]
+    ANG[Angular + Amplify]
+  end
+
+  subgraph Edge["Borde"]
+    GW[API Gateway<br/>entra-jwt + X-Source-Ip]
+    BFF[BFF :8080<br/>JWT + proxies]
+  end
+
+  subgraph Apps["EC2 apps — Compose"]
+    REQ[requests :8081]
+    CAT[catalog :8082]
+    NTY[notify :8083]
+    MQA[mq-admin :8084]
+    KAD[kafka-admin :8085]
+    REP[report :8086]
+    AUD[audit :8087]
+  end
+
+  subgraph MQ["EC2 mq"]
+    RMQ[(RabbitMQ 2 nodos)]
+  end
+
+  subgraph KFK["EC2 kafka — 3 ZK + 3 brokers + UI"]
+    KB[brokers :9092-9094]
+    KUI[Kafka UI :8090]
+  end
+
+  subgraph Data["Oracle Autonomous"]
+    ORA[(trámites · outbox · proyecciones · audit)]
+  end
+
+  ANG -->|Bearer JWT| GW --> BFF
+  BFF -->|X-User-*| REQ & CAT & MQA & KAD & REP & AUD
+  REQ --> ORA
+  REQ -->|comandos email/ticket/PDF| RMQ --> NTY
+  REQ -->|outbox → requests.events| KB
+  CAT & MQA & KAD -->|audit.timeline| KB
+  KB --> REP & AUD
+  REP & AUD --> ORA
+  KAD -.->|AdminClient / DLT| KB
+  KUI -.-> KB
+```
+
+| Pieza | Rol |
+|---|---|
+| **ec2-kafka** | Clúster 3+3 + UI. Compose en `kafka/`. Sin auto-create de tópicos. |
+| **kafka-admin** | Crea tópicos sistema, API Admin de tópicos/grupos/DLT, publica en `audit.timeline`. |
+| **requests** | Dueño del dominio del trámite; outbox → `requests.events`; comandos a Rabbit. |
+| **report** | Consume `requests.events` (`report-group`); KPIs/SLA en proyección Oracle. |
+| **audit** | Consume `audit.timeline` (`audit-group`); timeline de `requests.events` según EP3-40/42. |
+| **catalog / mq-admin** | Ops admin → `audit.timeline` (con `sourceIp`). |
+| **notify** | Consume Rabbit (no Kafka). |
+
+Flujo autenticado EP1 (arriba) no cambia: JWT solo en Gateway + BFF; hacia abajo `X-User-*` y, a catalog/mq/kafka-admin, `X-Source-Ip`.
 
 ## Despliegue de referencia (lab)
 
 | Pieza | Dónde |
 |-------|--------|
-| Front | AWS Amplify Hosting (producción); `ng serve` → `http://localhost:4200` (desarrollo) |
-| API Gateway | HTTP API `barriodigital-http` con JWT Authorizer, delante del BFF |
-| BFF + requests | Docker Compose en EC2 (`apps/compose.ec2.yml`) o local (`apps/compose.yml`) |
-| Oracle | Autonomous en OCI (no en AWS) |
-| Wallet | Volumen `/wallet`, no en Git |
+| Front | AWS Amplify Hosting; local `ng serve` → `http://localhost:4200` |
+| API Gateway | HTTP API `barriodigital-http`, JWT Authorizer, delante del BFF |
+| BFF + MS | EC2 apps: `apps/compose.ec2.yml` o layout JAR `apps/compose.ec2.jars.yml`; local `apps/compose.yml` |
+| RabbitMQ | EC2 mq (`mq/compose.yml`) |
+| Kafka | EC2 kafka (`kafka/compose.yml` / compose.ec2); UI `:8090` |
+| Oracle | Autonomous en OCI; wallet en volumen `/wallet`, no en Git |

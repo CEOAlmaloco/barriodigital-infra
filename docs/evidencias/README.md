@@ -51,3 +51,9 @@ Los puertos que se ven dentro del contenedor de RabbitMQ no están abiertos a in
 
 Recorrido anotado: `docs/kafka.md`.
 
+## EP3-57 — Documentación Kafka / arquitectura
+
+| Archivo | Qué muestra |
+|---|---|
+| `ep3-57-prueba-uso.txt` | Recorrido de las demos de `docs/kafka.md` ejecutado en lab (corte EP3-56) |
+
