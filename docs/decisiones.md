@@ -423,7 +423,7 @@ La exportación es el listado de `GET /api/requests` (EP3-30) en un archivo, sin
 
 | Rol | Qué exporta |
 |---|---|
-| **Vecino** | Solo sus trámites, también al buscar o filtrar. El filtro `assignee` responde 403, igual que en el listado. Sin `assigneeId` ni `assigneeName`: ve "En atención" |
+| **Vecino** | Solo sus trámites, también al buscar o filtrar. Los filtros `assignee` y `contactDue` responden 403, igual que en el listado. Sin `assigneeId` ni `assigneeName`: ve "En atención" |
 | **Funcionario y Admin** | Todos los trámites, con el correo del solicitante y el responsable |
 | **Auditor** | Todos los trámites, sin el correo del solicitante |
 
@@ -432,7 +432,7 @@ La exportación es el listado de `GET /api/requests` (EP3-30) en un archivo, sin
 ### 2. Endpoint
 
 ```
-GET /api/requests/export?status=&open=&from=&to=&assignee=&q=&procedureType=&sector=&sort=
+GET /api/requests/export?status=&open=&from=&to=&assignee=&contactDue=&q=&procedureType=&sector=&sort=
 ```
 
 Los parámetros y sus 400 son los del listado. `page` y `size` no aplican. Responde 200 con `text/csv; charset=UTF-8`, `Content-Disposition: attachment; filename="tramites-AAAA-MM-DD.csv"` (el día de Chile) y `Cache-Control: private, no-store`. Sin coincidencias, el archivo trae solo el encabezado.
@@ -453,7 +453,7 @@ Los parámetros y sus 400 son los del listado. `page` y `size` no aplican. Respo
 | Código | Causa |
 |---|---|
 | 400 | falta `X-User-Id`, un parámetro inválido como en el listado, o más de 5000 trámites |
-| 403 | sin rol o con más de un rol, o el Vecino usa `assignee` |
+| 403 | sin rol o con más de un rol, o el Vecino usa `assignee` o `contactDue` |
 
 ### 6. Capas
 
@@ -2916,6 +2916,7 @@ El destinatario de `PUT /assignee` tiene que estar en esa lista. `assignee_name`
    Ninguna acción humana queda sin autor. El cambio va en un `ALTER` manual en `db/`, porque `ddl-auto: update` no relaja un `NOT NULL`, y en `@Check` en la entidad, para que H2 lo exija en los tests. `kind` y `visibility` ya se guardan con `@Enumerated(EnumType.STRING)`. `actor_name` ya es nullable. `actor_role` (EP3-31) nace nullable por la misma razón y por las filas históricas.
    El mismo script reemplaza el `CHECK` que Hibernate creó para `kind` con `CREADO`, `ESTADO` y `GESTION`: lo busca por `SEARCH_CONDITION_VC`, porque su nombre `SYS_C…` cambia en cada base, y lo recrea con `ASIGNACION`. Sin ese paso, la primera toma falla en Oracle con ORA-02290.
 5. **Tiempo de asignación:** `tiempos` lo calcula con la primera fila `ASIGNACION` `INTERNO`, que es la que ve el staff.
+6. **Orden del expediente (EP3-66):** `activity_sequence`, que Oracle asigna al insertar con `request_activity_seq` (`ORDER`), ordena `/actividad`, el resumen de contacto y la última gestión del filtro `contactDue`. Cada escritura toma antes el bloqueo de la fila del trámite (EP3-02, sección 2.3), así que una operación posterior recibe un valor mayor aunque su `occurredAt` empate o el reloj retroceda. `occurredAt` es la hora informativa. La columna no sale en la API ni en Kafka. En bases existentes la crea `db/activity-sequence.sql`, sin escrituras concurrentes: el historial previo se numera por `occurred_at` e `id`, y la garantía del orden real aplica a las actividades registradas después.
 
 ### 7. Evento `request.assigned`
 
