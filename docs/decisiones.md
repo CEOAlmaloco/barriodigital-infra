@@ -2582,16 +2582,18 @@ La regla es autoritativa en el **BFF**, la única puerta pública, y en **reques
 
 Para cambiar el estado y registrar una gestión, el BFF y requests responden en este orden. Tomar y reasignar siguen el mismo esquema, con su propia tabla en EP3-05.
 
-| Paso | Código | Caso |
-|---|---|---|
-| 1 | 401 | Sin token |
-| 2 | 403 | Sin rol, con más de un rol, o un rol que no opera (Vecino, Auditor) |
-| 3 | 400 | Body inválido (`status`, `rejectionReason`, tamaños, `nextAttemptAt` no futura según EP3-10) e `interventionReason` ausente cuando quien llama es Admin |
-| 4 | 404 | El trámite no existe, o es ajeno para el Vecino |
-| 5 | 403 | Funcionario que no es el responsable, o trámite sin responsable |
-| 6 | 409 | Transición no permitida, cupo agotado, o gestión en un trámite cerrado (EP3-10) |
+| Paso | Código | Caso | `code` de requests en el cambio de estado (EP3-67) |
+|---|---|---|---|
+| 1 | 401 | Sin token | Lo responde el BFF |
+| 2 | 403 | Sin rol, con más de un rol, o un rol que no opera (Vecino, Auditor) | `ROLE_REQUIRED`, `SINGLE_ROLE_REQUIRED`, `STATUS_CHANGE_FORBIDDEN` |
+| 3 | 400 | Body inválido (`status`, `rejectionReason`, tamaños, `nextAttemptAt` no futura según EP3-10) e `interventionReason` ausente cuando quien llama es Admin | `STATUS_REQUIRED`, `STATUS_INVALID`, `CANCEL_REQUIRES_CANCEL_ENDPOINT`, `REJECTION_REASON_REQUIRED`, `INTERVENTION_REASON_REQUIRED`, `REQUEST_BODY_INVALID` (tamaños por `@Size` y JSON ilegible), `USER_ID_REQUIRED` |
+| 4 | 404 | El trámite no existe, o es ajeno para el Vecino | `REQUEST_NOT_FOUND` |
+| 5 | 403 | Funcionario que no es el responsable, o trámite sin responsable | `NOT_ASSIGNEE` |
+| 6 | 409 | Transición no permitida, cupo agotado, o gestión en un trámite cerrado (EP3-10) | `STATUS_TRANSITION_NOT_ALLOWED`; el cupo agotado es `QUOTA_EXHAUSTED` del BFF |
 
 Mantiene el orden del resto del proyecto (403, 400, 404, 409; EP2-04 y EP3-03), que es además el que impone Spring con `@Valid`. El paso 5 necesita el trámite, y en requests se evalúa dentro del bloqueo.
+
+`code` va junto a `message`, que no cambia, y los consumidores comparan `code`. La tabla completa, con los mensajes, está en el README de requests.
 
 Un Vecino que intenta operar un trámite ajeno recibe 403 en el paso 2, antes de cualquier 404: operar ya está prohibido por rol.
 
@@ -2599,7 +2601,8 @@ Un Vecino que intenta operar un trámite ajeno recibe 403 en el paso 2, antes de
 
 1. **El 400 del Admin sin `interventionReason`** lo responde el BFF antes del `GET`, porque depende solo del rol y del body.
 2. **El 403 de no responsable** lo responde el BFF con el `GET /api/requests/{id}` que ya hace, antes de tocar catalog.
-3. **`recognizedRejection` suma dos mensajes**, como red de seguridad: `Solo el responsable del tramite puede operarlo` (el caso real es una reasignación entre el `GET` y el `PUT`) e `interventionReason es obligatorio para el Admin`. Con ellos el BFF libera el cupo. Se compara por texto hasta que EP3-67 introduzca códigos estables.
+3. **`recognizedRejection` suma dos mensajes**, como red de seguridad: `Solo el responsable del tramite puede operarlo` (el caso real es una reasignación entre el `GET` y el `PUT`) e `interventionReason es obligatorio para el Admin`. Con ellos el BFF libera el cupo. requests ya responde `code` (EP3-67); el BFF compara por texto hasta que EP3-69 use `code`.
+4. **Un body rechazado por `@Valid` también es un rechazo reconocido.** Un `rejectionReason` o `interventionReason` de más de 500 caracteres lo rechaza el `@Size` del DTO antes que el servicio, con `REQUEST_BODY_INVALID` y el mensaje de Spring, y requests no guarda nada. Comparando textos, el BFF no lo reconoce: responde `ADMISSION_RESULT_UNCONFIRMED` y no libera el cupo. Al reconocer el código (EP3-69), el BFF libera el cupo.
 
 ### 6. Datos por rol
 
