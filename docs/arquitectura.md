@@ -157,7 +157,7 @@ Flujo autenticado EP1 (arriba) no cambia: JWT solo en Gateway + BFF; hacia abajo
 |-------|--------|
 | Front | AWS Amplify Hosting; local `ng serve` → `http://localhost:4200` |
 | API Gateway | HTTP API `barriodigital-http`, JWT Authorizer, delante del BFF |
-| BFF + MS | EC2 apps: `apps/compose.ec2.yml` o layout JAR `apps/compose.ec2.jars.yml`; local `apps/compose.yml` |
-| RabbitMQ | EC2 mq (`mq/compose.yml`) |
+| BFF + MS | **ec2-apps**: BFF, requests, **catalog**, **notify**, **mq-admin**, kafka-admin, report, audit (`apps/compose.ec2.yml` / `compose.ec2.jars.yml`; local `apps/compose.yml`) |
+| RabbitMQ | **ec2-mq** (`mq/compose.yml`): clúster de 2 nodos; Management/AMQP solo desde apps o IP de casa |
 | Kafka | EC2 kafka (`kafka/compose.yml` / compose.ec2); UI `:8090` |
 | Oracle | Autonomous en OCI; wallet en volumen `/wallet`, no en Git |

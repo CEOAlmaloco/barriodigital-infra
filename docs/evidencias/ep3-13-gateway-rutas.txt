@@ -1,0 +1,42 @@
+Auth	Authorizer	RouteKey	Target
+JWT	entra-jwt	DELETE /api/kafka/{proxy+}	integrations/qugtm9t
+JWT	entra-jwt	DELETE /api/mq/{proxy+}	integrations/3fkl4f9
+JWT	entra-jwt	DELETE /{proxy+}	integrations/28y7g65
+JWT	entra-jwt	GET /api/audit/{proxy+}	integrations/8bgd519
+JWT	entra-jwt	GET /api/catalog/{proxy+}	integrations/261a5re
+JWT	entra-jwt	GET /api/kafka/{proxy+}	integrations/qugtm9t
+JWT	entra-jwt	GET /api/mq/{proxy+}	integrations/3fkl4f9
+JWT	entra-jwt	GET /api/report/{proxy+}	integrations/pxm740p
+JWT	entra-jwt	GET /api/requests/assignees	integrations/2ungxld
+JWT	entra-jwt	GET /api/requests/meta/transitions	integrations/mw4f7vp
+JWT	entra-jwt	GET /{proxy+}	integrations/28y7g65
+JWT	entra-jwt	PATCH /api/kafka/{proxy+}	integrations/qugtm9t
+JWT	entra-jwt	PATCH /{proxy+}	integrations/28y7g65
+JWT	entra-jwt	POST /api/catalog/{proxy+}	integrations/261a5re
+JWT	entra-jwt	POST /api/kafka/{proxy+}	integrations/qugtm9t
+JWT	entra-jwt	POST /api/mq/{proxy+}	integrations/3fkl4f9
+JWT	entra-jwt	POST /api/requests/{id}/take	integrations/cwqqswm
+JWT	entra-jwt	POST /{proxy+}	integrations/28y7g65
+JWT	entra-jwt	PUT /api/catalog/{proxy+}	integrations/261a5re
+JWT	entra-jwt	PUT /api/kafka/{proxy+}	integrations/qugtm9t
+JWT	entra-jwt	PUT /api/mq/{proxy+}	integrations/3fkl4f9
+JWT	entra-jwt	PUT /api/requests/{id}/assignee	integrations/j89wuqs
+JWT	entra-jwt	PUT /api/requests/{id}/status	integrations/b0loqsp
+JWT	entra-jwt	PUT /{proxy+}	integrations/28y7g65
+
+Verificacion EP3-13 (17-nov-2026)
+API: barriodigital-http (0yo277ntr8)
+Invoke: https://0yo277ntr8.execute-api.us-east-1.amazonaws.com
+
+Rutas /actividad, /gestiones y /attachment NO tienen RouteKey literal.
+Entran por GET|POST|PUT|PATCH|DELETE /{proxy+} con authorizer entra-jwt.
+Metodos catch-all /{proxy+}: ['DELETE', 'GET', 'PATCH', 'POST', 'PUT']
+
+Mapeo:
+  GET  /api/requests/{id}/actividad   -> GET /{proxy+}
+  POST /api/requests/{id}/gestiones   -> POST /{proxy+}
+  GET  /api/requests/{id}/attachment  -> GET /{proxy+}
+  GET  /api/requests/{id}/comments/{commentId}/attachment -> GET /{proxy+}
+
+Authorizers:
+  entra-jwt id=kxkdtt audiences=['api://a0773f3e-abc6-4b53-86fc-9d33a2eddef3', 'a0773f3e-abc6-4b53-86fc-9d33a2eddef3']
