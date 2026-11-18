@@ -11,6 +11,7 @@
 | EP3-05 | Contrato: folio y asignación |
 | EP3-06 | Contrato: plazos en días hábiles |
 | EP3-07 | Contrato: APIs de report y audit |
+| EP3-08 / EP1 | Contrato: historial, gestiones, ubicación e imágenes |
 | EP3-65 | Contrato: preferencias de aviso del usuario |
 | EP3-74 | Contrato: encuesta de satisfacción |
 | EP3-75 | Contrato: aviso de posible duplicado |
@@ -26,10 +27,9 @@ Guía operativa de Kafka: `docs/kafka.md`. Arquitectura: `docs/arquitectura.md`.
 - Application ID URI: `api://a0773f3e-abc6-4b53-86fc-9d33a2eddef3` (el `aud` real de los tokens es otro, ver "Contrato JWT")
 - Redirect URIs (SPA):
   - http://localhost:4200 (desarrollo). Con este redirect el login sí entrega token.
-  - https://main.db7dk8tawyzry.amplifyapp.com es el redirect que manda el frontend
-    de este lab. Entra todavía no lo tiene en la app registration: el login
-    responde AADSTS50011. Hay que agregarlo en el portal, junto al de localhost,
-    para que la sesión de Amplify cierre.
+  - https://main.db7dk8tawyzry.amplifyapp.com (Amplify del lab). Está registrado en
+    la app registration: el login de Amplify cierra sin AADSTS50011. Si Entra
+    volviera a responder AADSTS50011, falta ese redirect en el portal.
 
 ## Roles y usuarios de prueba
 
@@ -49,14 +49,11 @@ Guía operativa de Kafka: `docs/kafka.md`. Arquitectura: `docs/arquitectura.md`.
 
 ## Despliegue en AWS
 
-- catalog, notify, requests y el BFF corren en la EC2 `barriodigital-apps`
-  (`i-0e0571365e11188c4`, IP pública `54.175.48.178`, privada `172.31.45.131`).
-  Los cuatro contenedores están Up y healthy: `bd-catalog`, `bd-notify`,
-  `bd-requests` y `bd-bff`. Al encender el lab la IP pública cambió y el
-  Gateway quedó apuntando a la anterior; se actualizó a esta. El BFF se
-  recreó a las 23:29Z, con catalog ya healthy. Si se recrea la instancia
-  cambia su IP pública, y hay que actualizar la integración del API Gateway
-  hacia el BFF.
+- catalog, notify, requests, mq-admin, kafka-admin, report, audit y el BFF corren
+  en la EC2 `barriodigital-apps`. La IP pública del lab cambia al recrear la
+  instancia (corte EP3-13: `98.91.194.114`); hay que actualizar las integraciones
+  HTTP_PROXY del API Gateway hacia `http://<IP>:8080/...`. Evidencia:
+  `docs/evidencias/ep3-13-gateway-integrations.txt`.
 - catalog no publica puerto: `expose: "8082"`, sin `ports`. El BFF lo llama con
   `CATALOG_BASE_URL=http://catalog:8082`. `reserve` y `release` no validan JWT
   y solo son alcanzables dentro de la red del compose.
@@ -64,11 +61,11 @@ Guía operativa de Kafka: `docs/kafka.md`. Arquitectura: `docs/arquitectura.md`.
   a que el health de catalog esté UP antes de arrancar el BFF. Si se recrea el
   BFF mientras catalog no responde, el alta de trámites responde 503.
 - API Gateway (HTTP API `barriodigital-http`), Invoke URL: https://0yo277ntr8.execute-api.us-east-1.amazonaws.com
-  - Reenvía al BFF en `http://3.92.161.52:8080` (EC2 `barriodigital-apps`; la IP pública
-    cambia al reiniciar el lab). En catalog, mq, kafka, report y audit la integración
-    conserva el prefijo (`/api/catalog/{proxy}`, `/api/mq/{proxy}`, `/api/kafka/{proxy}`,
-    `/api/report/{proxy}`, `/api/audit/{proxy}`): en esas rutas `{proxy}` es solo el
-    resto del path.
+  - Reenvía al BFF en `http://<IP-pública-apps>:8080` (EC2 `barriodigital-apps`; la IP
+    cambia al reiniciar el lab; corte EP3-13: `98.91.194.114`). En catalog, mq, kafka,
+    report y audit la integración conserva el prefijo (`/api/catalog/{proxy}`,
+    `/api/mq/{proxy}`, `/api/kafka/{proxy}`, `/api/report/{proxy}`, `/api/audit/{proxy}`):
+    en esas rutas `{proxy}` es solo el resto del path.
   - JWT Authorizer `entra-jwt`: issuer https://login.microsoftonline.com/ce6e98c4-63f0-4b79-83e5-20925b5fada2/v2.0.
     Audiences: `a0773f3e-abc6-4b53-86fc-9d33a2eddef3` y `api://a0773f3e-abc6-4b53-86fc-9d33a2eddef3`.
   - JWT en las rutas de negocio. Sin token el Gateway responde 401. No mira el rol:
@@ -122,6 +119,60 @@ Guía operativa de Kafka: `docs/kafka.md`. Arquitectura: `docs/arquitectura.md`.
   La IP pública cambia al recrear la instancia; cómo rehacerla está en
   `mq/README.md`. En local los dos puertos siguen en `127.0.0.1`.
 
+## Contrato: historial, gestiones, ubicación e imágenes (EP3-08 / EP1)
+
+Contrato de corte para el expediente del trámite. Detalles de visibilidad por rol
+también en EP3-04; el comentario del vecino con foto, en EP3-64.
+
+### 1. Tabla `request_activity`
+
+| Columna | Uso |
+|---|---|
+| `id`, `request_id` | Identidad del evento; hay UNIQUE `(id, request_id)` para adjuntos de comentario |
+| `kind` | `CREADO`, `ESTADO`, `GESTION`, `ASIGNACION`, `COMENTARIO`, `CALIFICACION`, … |
+| `visibility` | `PUBLICO` o `INTERNO` |
+| `summary`, `occurred_at` | Texto y marca de tiempo informativa |
+| `from_status` / `to_status` | Solo en cambios de estado |
+| `actor_id`, `actor_name`, `actor_role` | Quién actuó; el hito público de asignación puede ir sin actor |
+| `intervention_reason` | Motivo interno de intervención (staff); el Vecino no lo ve en `/actividad` |
+| `has_attachment` | 0/1; foto ligada al evento (comentario) |
+| `activity_sequence` | Orden del expediente (EP3-66); no sale en la API |
+
+### 2. `GET /api/requests/{id}/actividad`
+
+Devuelve el historial filtrado por rol, más `tiempos` calculables. El Vecino no
+ve filas `INTERNO` ni `interventionReason`. El Gateway no tiene RouteKey literal:
+entra por `GET /{proxy+}` con authorizer `entra-jwt` (evidencia EP3-13).
+
+### 3. `POST /api/requests/{id}/gestiones`
+
+Registra una gestión declarada (`GESTION`). Body con nota (tope 500) e
+`interventionReason` cuando aplica. Roles: Funcionario responsable o Admin con
+intervención (EP3-04 / EP3-05). Entra por `POST /{proxy+}` + JWT.
+
+### 4. Ubicación (`LocationRules`)
+
+- Dirección (`address`) obligatoria en el alta.
+- `sector`: clave de Alto Biobío (`ralco`, `villa-ralco`, `pitril`, …, `otro`) o ausente.
+- `latitude`/`longitude` van juntas; si vienen, deben caer en la caja de la comuna
+  (lat −38.25…−37.60, lon −71.80…−71.00) y traer `locationPrecision`
+  `EXACTA` o `APROXIMADA`. Fuera de la comuna → 400.
+
+### 5. Adjuntos (imagen)
+
+- Alta: `multipart/form-data` con parte `request` (JSON) y `attachment` opcional.
+- Formatos: JPEG/PNG (WebP lo convierte el FE a PNG). No SVG.
+- Límites: 5 MB; máx. 6000 px por lado / 12 MP; se reencodea y se quitan metadatos.
+- `GET /api/requests/{id}/attachment`: titular o personal; otro Vecino → 404.
+- Comentario con foto: EP3-64 (`/comments` y `/comments/{commentId}/attachment`).
+- Gateway: `/attachment` también por `GET /{proxy+}` + JWT.
+
+### 6. Gateway (verificación EP3-13)
+
+Capturas en `docs/evidencias/ep3-13-gateway-*.txt`: sin token, `/actividad`,
+`/gestiones` y `/attachment` responden **401** del authorizer. Con token válido
+llegan al BFF vía la integración `/{proxy}`.
+
 ## Contrato JWT
 
 - Claim de rol: `roles` (estándar de Microsoft Entra ID para App Roles asignados a usuarios)
@@ -131,11 +182,11 @@ Guía operativa de Kafka: `docs/kafka.md`. Arquitectura: `docs/arquitectura.md`.
   Cualquier validador de audience (API Gateway JWT Authorizer, BFF, etc.) debe
   aceptar el GUID plano; el Application ID URI puede quedar como segundo valor
   aceptado, pero no alcanza por sí solo.
-  - BFF: acepta los valores de `AZURE_AUDIENCES`, separados por coma. Su valor
-    por defecto en `application.yml` es solo `api://…`, así que el `.env` (de la
-    EC2 y el local) debe traer ambos:
-    `AZURE_AUDIENCES=api://a0773f3e-abc6-4b53-86fc-9d33a2eddef3,a0773f3e-abc6-4b53-86fc-9d33a2eddef3`.
-    Sin el GUID, el BFF responde 401 "Audience inválido".
+  - BFF: acepta los valores de `AZURE_AUDIENCES`, separados por coma. El default
+    de `application.yml` ya trae ambos
+    (`api://a0773f3e-abc6-4b53-86fc-9d33a2eddef3,a0773f3e-abc6-4b53-86fc-9d33a2eddef3`).
+    El `.env` puede omitirlos o repetirlos. Si alguien deja solo `api://…`, el BFF
+    responde 401 "Audience inválido" con los tokens v2 (GUID plano).
 - Scopes: openid, profile (login básico vía MSAL)
   - Scope custom `access_as_user`: en uso desde EP1. El frontend lo solicita en el login (msal-config.ts) junto con openid/profile, para que el accessToken tenga audience hacia la API y traiga el claim `roles`.
 - El BFF valida issuer, audience y firma contra el token recibido; no valida un scope custom todavía, solo el claim `roles` para autorización.

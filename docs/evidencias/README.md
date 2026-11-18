@@ -30,6 +30,15 @@ Los puertos que se ven dentro del contenedor de RabbitMQ no están abiertos a in
 | `ec2-kafka-sg.json` / `ec2-kafka-sg-table.txt` | SG: 9092–94 desde apps; UI/SSH `/32`; sin 2181 |
 | `ec2-kafka-ui.png` | Kafka UI con cluster ONLINE |
 
+## EP3-13 — historial / gestiones / attachment por `/{proxy+}`
+
+| Archivo | Qué muestra |
+|---|---|
+| `ep3-13-gateway-rutas.txt` | Rutas del HTTP API + nota: `/actividad`, `/gestiones` y `/attachment` entran por `GET\|POST /{proxy+}` con `entra-jwt` |
+| `ep3-13-gateway-401-probe.txt` | Sin JWT: esas tres rutas (y POST gestiones) → **401** del authorizer |
+| `ep3-13-gateway-integrations.txt` | Integraciones al BFF del lab (`98.91.194.114:8080`) con `overwrite:header.X-Source-Ip` |
+| `ep3-13-gateway-authorizers.json` | Authorizer `entra-jwt` y audiences GUID + `api://…` |
+
 ## EP3-55 — API Gateway rutas + X-Source-Ip
 
 | Archivo | Qué muestra |

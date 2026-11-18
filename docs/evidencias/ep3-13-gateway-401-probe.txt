@@ -1,0 +1,6 @@
+﻿Probe EP3-13 sin JWT (esperado 401 del authorizer)
+
+GET /api/requests/x/actividad -> 401
+GET /api/requests/x/gestiones -> 401
+GET /api/requests/x/attachment -> 401
+POST /api/requests/x/gestiones -> 401

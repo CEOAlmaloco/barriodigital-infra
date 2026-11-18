@@ -1,0 +1,11 @@
+261a5re	http://98.91.194.114:8080/api/catalog/{proxy}
+28y7g65	http://98.91.194.114:8080/{proxy}
+2ungxld	http://98.91.194.114:8080/api/requests/assignees
+3fkl4f9	http://98.91.194.114:8080/api/mq/{proxy}
+8bgd519	http://98.91.194.114:8080/api/audit/{proxy}
+b0loqsp	http://98.91.194.114:8080/api/requests/{id}/status
+cwqqswm	http://98.91.194.114:8080/api/requests/{id}/take
+j89wuqs	http://98.91.194.114:8080/api/requests/{id}/assignee
+mw4f7vp	http://98.91.194.114:8080/api/requests/meta/transitions
+pxm740p	http://98.91.194.114:8080/api/report/{proxy}
+qugtm9t	http://98.91.194.114:8080/api/kafka/{proxy}
