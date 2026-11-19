@@ -11,6 +11,7 @@ Documentación compartida de BarrioDigital (no es un compose).
 | `rabbitmq-mensaje-muerto.md` | Exchanges, colas y bindings de RabbitMQ, y cómo dejar un mensaje en una DLQ |
 | `rabbitmq.md` | Recorrido en la nube: alta, cupo, terreno, resolución, DLQ, broker detenido y restart del compose |
 | `evidencias/` | Capturas de respaldo de la demo: overview, conexiones, colas y exchanges de RabbitMQ |
+| `operacion/identidad-personal-mfa.md` | MFA del personal, registro de aprobación de roles y revisión de accesos (EP3.5-08) |
 
 Pendiente de ir agregando:
 
