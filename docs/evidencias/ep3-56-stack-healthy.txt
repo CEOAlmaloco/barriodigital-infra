@@ -1,0 +1,15 @@
+Fecha: 2026-11-12
+Host apps: 3.92.161.52
+
+bd-bff           Up (healthy)
+bd-requests      Up (healthy)
+bd-notify        Up (healthy)
+bd-catalog       Up (healthy)
+bd-mq-admin      Up (healthy)
+bd-report        Up (healthy)
+bd-audit         Up (healthy)
+bd-kafka-admin   Up (healthy)
+
+Tópicos Kafka (kafka-admin GET /api/kafka/topics):
+requests.events + audit.timeline + 3 DLT → 3 particiones / RF 3.
+Detalle requests.events: ISR=[1,2,3] en las 3 particiones; min.insync.replicas=2.

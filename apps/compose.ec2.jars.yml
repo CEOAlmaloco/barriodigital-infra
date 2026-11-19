@@ -1,0 +1,262 @@
+# Layout plano EC2 con JARs precompilados (~/barriodigital/{servicio}/app.jar).
+# Usar cuando no se clonan los repos completos en la instancia.
+name: barriodigital-apps
+
+services:
+  catalog:
+    build:
+      context: .
+      dockerfile: runtime.Dockerfile
+      args:
+        JAR: catalog/app.jar
+    image: barriodigital-apps-catalog:ep3
+    container_name: bd-catalog
+    expose:
+      - "8082"
+    mem_limit: 512m
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+ExitOnOutOfMemoryError"
+      ORACLE_URL: ${ORACLE_URL}
+      ORACLE_USER: ${ORACLE_USER}
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD}
+      ORACLE_WALLET_DIR: /wallet
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?Definir endpoint privado de EC2-Kafka}
+    volumes:
+      - ./wallet:/wallet:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "4", "http://localhost:8082/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 50s
+    restart: unless-stopped
+
+  notify:
+    build:
+      context: .
+      dockerfile: runtime.Dockerfile
+      args:
+        JAR: notify/app.jar
+    image: barriodigital-apps-notify:ep3
+    container_name: bd-notify
+    expose:
+      - "8083"
+    mem_limit: 512m
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+ExitOnOutOfMemoryError"
+      RABBIT_ADDRESSES: ${RABBIT_ADDRESSES:?Definir endpoint privado de EC2-MQ}
+      RABBIT_USER: ${RABBIT_USER:-barriodigital}
+      RABBIT_PASSWORD: ${RABBIT_PASSWORD:?Definir RABBIT_PASSWORD}
+      CERTIFICATE_OUTPUT_DIR: /app/data/certificates
+      EMAIL_MODE: ${EMAIL_MODE:-logging}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-25}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_AUTH: ${SMTP_AUTH:-false}
+      SMTP_STARTTLS_ENABLE: ${SMTP_STARTTLS_ENABLE:-false}
+      SMTP_STARTTLS_REQUIRED: ${SMTP_STARTTLS_REQUIRED:-false}
+      SMTP_CONNECTION_TIMEOUT: ${SMTP_CONNECTION_TIMEOUT:-5000}
+      SMTP_READ_TIMEOUT: ${SMTP_READ_TIMEOUT:-5000}
+      SMTP_WRITE_TIMEOUT: ${SMTP_WRITE_TIMEOUT:-5000}
+    volumes:
+      - certificates:/app/data/certificates
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "4", "http://localhost:8083/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 50s
+    restart: unless-stopped
+
+  mq-admin:
+    build:
+      context: .
+      dockerfile: runtime.Dockerfile
+      args:
+        JAR: mq-admin/app.jar
+    image: barriodigital-apps-mq-admin:ep3
+    container_name: bd-mq-admin
+    expose:
+      - "8084"
+    mem_limit: 384m
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+ExitOnOutOfMemoryError"
+      RABBITMQ_HOST: ${RABBITMQ_HOST:-172.31.46.156}
+      RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+      RABBITMQ_USER: ${RABBIT_USER:-barriodigital}
+      RABBITMQ_PASSWORD: ${RABBIT_PASSWORD:?Definir RABBIT_PASSWORD}
+      RABBITMQ_MANAGEMENT_URL: ${RABBITMQ_MANAGEMENT_URL:-http://172.31.46.156:15672}
+      RABBITMQ_VHOST: ${RABBITMQ_VHOST:-/}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?Definir INTERNAL_TOKEN}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?Definir endpoint privado de EC2-Kafka}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "4", "http://localhost:8084/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 50s
+    restart: unless-stopped
+
+  kafka-admin:
+    build:
+      context: .
+      dockerfile: runtime.Dockerfile
+      args:
+        JAR: kafka-admin/app.jar
+    image: barriodigital-apps-kafka-admin:ep3
+    container_name: bd-kafka-admin
+    expose:
+      - "8085"
+    mem_limit: 512m
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+ExitOnOutOfMemoryError"
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?Definir endpoint privado de EC2-Kafka}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?Definir INTERNAL_TOKEN}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "4", "http://localhost:8085/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 50s
+    restart: unless-stopped
+
+  report:
+    build:
+      context: .
+      dockerfile: runtime.Dockerfile
+      args:
+        JAR: report/app.jar
+    image: barriodigital-apps-report:ep3
+    container_name: bd-report
+    expose:
+      - "8086"
+    mem_limit: 512m
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+ExitOnOutOfMemoryError"
+      ORACLE_URL: ${ORACLE_URL}
+      ORACLE_USER: ${ORACLE_USER}
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD}
+      ORACLE_WALLET_DIR: /wallet
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?Definir endpoint privado de EC2-Kafka}
+    volumes:
+      - ./wallet:/wallet:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "4", "http://localhost:8086/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    restart: unless-stopped
+
+  audit:
+    build:
+      context: .
+      dockerfile: runtime.Dockerfile
+      args:
+        JAR: audit/app.jar
+    image: barriodigital-apps-audit:ep3
+    container_name: bd-audit
+    expose:
+      - "8087"
+    mem_limit: 384m
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+ExitOnOutOfMemoryError"
+      ORACLE_URL: ${ORACLE_URL}
+      ORACLE_USER: ${ORACLE_USER}
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD}
+      ORACLE_WALLET_DIR: /wallet
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?Definir endpoint privado de EC2-Kafka}
+    volumes:
+      - ./wallet:/wallet:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "4", "http://localhost:8087/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    restart: unless-stopped
+
+  requests:
+    build:
+      context: .
+      dockerfile: runtime.Dockerfile
+      args:
+        JAR: requests/app.jar
+    image: barriodigital-apps-requests:ep3
+    container_name: bd-requests
+    ports:
+      - "8081:8081"
+    mem_limit: 768m
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+ExitOnOutOfMemoryError"
+      ORACLE_URL: ${ORACLE_URL}
+      ORACLE_USER: ${ORACLE_USER}
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD}
+      ORACLE_WALLET_DIR: /wallet
+      RABBIT_ADDRESSES: ${RABBIT_ADDRESSES:?Definir endpoint privado de EC2-MQ}
+      RABBIT_USER: ${RABBIT_USER:-barriodigital}
+      RABBIT_PASSWORD: ${RABBIT_PASSWORD:?Definir RABBIT_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?Definir endpoint privado de EC2-Kafka}
+    volumes:
+      - ./wallet:/wallet:ro
+    depends_on:
+      notify:
+        condition: service_healthy
+      kafka-admin:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "4", "http://localhost:8081/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 50s
+    restart: unless-stopped
+
+  bff:
+    build:
+      context: .
+      dockerfile: runtime.Dockerfile
+      args:
+        JAR: bff/app.jar
+    image: barriodigital-apps-bff:ep3
+    container_name: bd-bff
+    ports:
+      - "8080:8080"
+    mem_limit: 512m
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+ExitOnOutOfMemoryError"
+      AZURE_ISSUER_URI: ${AZURE_ISSUER_URI}
+      AZURE_AUDIENCES: ${AZURE_AUDIENCES}
+      REQUESTS_BASE_URL: http://requests:8081
+      CATALOG_BASE_URL: http://catalog:8082
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:4200}
+      MQ_ADMIN_BASE_URL: http://mq-admin:8084
+      KAFKA_ADMIN_BASE_URL: http://kafka-admin:8085
+      REPORT_BASE_URL: http://report:8086
+      AUDIT_BASE_URL: http://audit:8087
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?Definir INTERNAL_TOKEN}
+    depends_on:
+      requests:
+        condition: service_started
+      catalog:
+        condition: service_healthy
+      mq-admin:
+        condition: service_started
+      kafka-admin:
+        condition: service_started
+      report:
+        condition: service_started
+      audit:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "4", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    restart: unless-stopped
+
+volumes:
+  certificates:

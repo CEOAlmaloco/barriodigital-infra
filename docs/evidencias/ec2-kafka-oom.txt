@@ -1,0 +1,7 @@
+﻿zk-1 status=running oom=false
+zk-2 status=running oom=false
+zk-3 status=running oom=false
+kafka-1 status=running oom=false
+kafka-2 status=running oom=false
+kafka-3 status=running oom=false
+kafka-ui status=running oom=false

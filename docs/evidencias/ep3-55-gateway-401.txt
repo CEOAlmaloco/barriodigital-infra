@@ -1,0 +1,4 @@
+﻿GET /api/kafka/topics -> 401 {"message":"Unauthorized"}
+GET /api/report/summary -> 401 {"message":"Unauthorized"}
+GET /api/audit/events -> 401 {"message":"Unauthorized"}
+GET /api/requests/assignees -> 401 {"message":"Unauthorized"}

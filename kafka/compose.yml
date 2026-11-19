@@ -1,13 +1,192 @@
-# BarrioDigital — kafka (ec2-kafka)
+# BarrioDigital — Kafka local: 3 Zookeeper + 3 brokers + Kafka UI
 #
-# EP1: placeholder. Kafka + Zookeeper entran en Unidad 3 (report + audit).
-# No levanta cluster todavía.
+#   copy kafka/.env.example kafka/.env   (ajustar KAFKA_HOST_IP)
+#   docker compose -f kafka/compose.yml --env-file kafka/.env up -d
 #
-# Futuro (U3):
-#   - zookeeper (x3 según el caso)
-#   - kafka (x3 según el caso)
-#   - UI ops (restringida)
+# KAFKA_HOST_IP es la IP del host que se anuncia en el listener EXTERNAL:
+# los clientes de fuera de Docker llegan por los puertos publicados 9092-9094.
+# Dentro de la red del compose, los servicios usan el listener INTERNAL (9092).
+# Kafka UI queda en http://localhost:8090 con el login de .env.
+# Credenciales de la UI: kafka/.env (plantilla en .env.example). Nunca en git.
 
 name: barriodigital-kafka
 
-services: {}
+x-zk-env: &zk-env
+  KAFKA_HEAP_OPTS: "-Xmx256M -Xms256M"
+  ZOOKEEPER_SERVERS: zookeeper-1:2888:3888;zookeeper-2:2888:3888;zookeeper-3:2888:3888
+  ZOOKEEPER_CLIENT_PORT: "2181"
+
+x-zk-common: &zk-common
+  image: confluentinc/cp-zookeeper:7.9.10
+  mem_limit: 512m
+  healthcheck:
+    test: ["CMD-SHELL", "echo srvr | nc -w 2 localhost 2181 | grep -q 'Zookeeper version'"]
+    interval: 10s
+    timeout: 5s
+    retries: 12
+    start_period: 30s
+  restart: unless-stopped
+
+x-kafka-env: &kafka-env
+  KAFKA_HEAP_OPTS: "-Xmx512M -Xms512M"
+  KAFKA_ZOOKEEPER_CONNECT: zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181
+  KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+  KAFKA_LISTENERS: INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:9094
+  KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+  KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+  KAFKA_DEFAULT_REPLICATION_FACTOR: "3"
+  KAFKA_MIN_INSYNC_REPLICAS: "2"
+  KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "3"
+  KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "3"
+  KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "2"
+  KAFKA_UNCLEAN_LEADER_ELECTION_ENABLE: "false"
+  KAFKA_DELETE_TOPIC_ENABLE: "true"
+
+x-kafka-healthcheck: &kafka-healthcheck
+  test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+  interval: 15s
+  timeout: 10s
+  retries: 12
+  start_period: 60s
+
+services:
+  zookeeper-1:
+    <<: *zk-common
+    container_name: zk-1
+    hostname: zookeeper-1
+    environment:
+      <<: *zk-env
+      ZOOKEEPER_SERVER_ID: "1"
+    volumes:
+      - zk_data_1:/var/lib/zookeeper/data
+      - zk_log_1:/var/lib/zookeeper/log
+
+  zookeeper-2:
+    <<: *zk-common
+    container_name: zk-2
+    hostname: zookeeper-2
+    environment:
+      <<: *zk-env
+      ZOOKEEPER_SERVER_ID: "2"
+    volumes:
+      - zk_data_2:/var/lib/zookeeper/data
+      - zk_log_2:/var/lib/zookeeper/log
+
+  zookeeper-3:
+    <<: *zk-common
+    container_name: zk-3
+    hostname: zookeeper-3
+    environment:
+      <<: *zk-env
+      ZOOKEEPER_SERVER_ID: "3"
+    volumes:
+      - zk_data_3:/var/lib/zookeeper/data
+      - zk_log_3:/var/lib/zookeeper/log
+
+  kafka-1:
+    image: confluentinc/cp-kafka:7.9.10
+    container_name: kafka-1
+    hostname: kafka-1
+    mem_limit: 1g
+    environment:
+      <<: *kafka-env
+      KAFKA_BROKER_ID: "1"
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-1:9092,EXTERNAL://${KAFKA_HOST_IP:?Definir kafka/.env a partir de kafka/.env.example}:9092
+    ports:
+      - "${KAFKA_BIND_ADDRESS:-127.0.0.1}:9092:9094"
+    volumes:
+      - kafka_data_1:/var/lib/kafka/data
+    depends_on:
+      zookeeper-1:
+        condition: service_healthy
+      zookeeper-2:
+        condition: service_healthy
+      zookeeper-3:
+        condition: service_healthy
+    healthcheck: *kafka-healthcheck
+    restart: unless-stopped
+
+  kafka-2:
+    image: confluentinc/cp-kafka:7.9.10
+    container_name: kafka-2
+    hostname: kafka-2
+    mem_limit: 1g
+    environment:
+      <<: *kafka-env
+      KAFKA_BROKER_ID: "2"
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-2:9092,EXTERNAL://${KAFKA_HOST_IP:?Definir kafka/.env a partir de kafka/.env.example}:9093
+    ports:
+      - "${KAFKA_BIND_ADDRESS:-127.0.0.1}:9093:9094"
+    volumes:
+      - kafka_data_2:/var/lib/kafka/data
+    depends_on:
+      zookeeper-1:
+        condition: service_healthy
+      zookeeper-2:
+        condition: service_healthy
+      zookeeper-3:
+        condition: service_healthy
+    healthcheck: *kafka-healthcheck
+    restart: unless-stopped
+
+  kafka-3:
+    image: confluentinc/cp-kafka:7.9.10
+    container_name: kafka-3
+    hostname: kafka-3
+    mem_limit: 1g
+    environment:
+      <<: *kafka-env
+      KAFKA_BROKER_ID: "3"
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-3:9092,EXTERNAL://${KAFKA_HOST_IP:?Definir kafka/.env a partir de kafka/.env.example}:9094
+    ports:
+      - "${KAFKA_BIND_ADDRESS:-127.0.0.1}:9094:9094"
+    volumes:
+      - kafka_data_3:/var/lib/kafka/data
+    depends_on:
+      zookeeper-1:
+        condition: service_healthy
+      zookeeper-2:
+        condition: service_healthy
+      zookeeper-3:
+        condition: service_healthy
+    healthcheck: *kafka-healthcheck
+    restart: unless-stopped
+
+  kafka-ui:
+    image: kafbat/kafka-ui:v1.5.0
+    container_name: kafka-ui
+    mem_limit: 768m
+    ports:
+      - "${KAFKA_UI_BIND_ADDRESS:-127.0.0.1}:8090:8080"
+    environment:
+      JAVA_OPTS: "-Xmx512M"
+      KAFKA_CLUSTERS_0_NAME: barriodigital-local
+      KAFKA_CLUSTERS_0_BOOTSTRAP_SERVERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
+      AUTH_TYPE: LOGIN
+      SPRING_SECURITY_USER_NAME: ${KAFKA_UI_USER:?Definir kafka/.env a partir de kafka/.env.example}
+      SPRING_SECURITY_USER_PASSWORD: ${KAFKA_UI_PASSWORD:?Definir kafka/.env a partir de kafka/.env.example}
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+      kafka-3:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -S -O /dev/null --timeout=4 http://localhost:8080/ 2>&1 | grep -q 'HTTP/1.1'"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    restart: unless-stopped
+
+volumes:
+  zk_data_1:
+  zk_log_1:
+  zk_data_2:
+  zk_log_2:
+  zk_data_3:
+  zk_log_3:
+  kafka_data_1:
+  kafka_data_2:
+  kafka_data_3:
