@@ -40,12 +40,15 @@ Kafka sigue sin `up` funcional.
 
 ## Docs
 
-- `docs/decisiones.md` — Entra ID, JWT, despliegue AWS y **contratos EP1–EP3** (índice EP3 al inicio)
-- `docs/arquitectura.md` — Amplify → Gateway → BFF → MS; Rabbit, **Kafka / ec2-kafka**, report, audit, kafka-admin
-- `docs/kafka.md` — tópicos, productores/consumidores/grupos, demos y límites (EP3-57)
-- `docs/matriz-funcionalidades.md` — estado real EP1–EP3 con evidencia
-- `docs/checklist-parcial-5.md` — rúbrica Parcial 5 (Kafka)
-- `docs/evidencias/` — capturas y textos de demos (EP3-15, 55, 56, …)
+Índice: [`docs/README.md`](docs/README.md) (EP3.5-01).
+
+- `docs/decisiones.md` — Entra ID, roles de prueba y limitaciones
+- `docs/contratos/` — contratos por tema (antes en `decisiones.md`)
+- `docs/operacion/` — despliegue AWS y guías de operación
+- `docs/arquitectura.md` — Amplify → Gateway → BFF → MS; Rabbit, Kafka, report, audit
+- `docs/matriz-funcionalidades.md` — estado real vs `develop`
+- `docs/INVENTARIO_EP3.md` — inventario EP3 (histórico)
+- `docs/evidencias/` — capturas y textos de demos
 
 ## Repos relacionados
 
