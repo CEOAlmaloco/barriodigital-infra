@@ -47,7 +47,6 @@ Kafka sigue sin `up` funcional.
 - `docs/operacion/` — despliegue AWS y guías de operación
 - `docs/arquitectura.md` — Amplify → Gateway → BFF → MS; Rabbit, Kafka, report, audit
 - `docs/matriz-funcionalidades.md` — estado real vs `develop`
-- `docs/INVENTARIO_EP3.md` — inventario EP3 (histórico)
 - `docs/evidencias/` — capturas y textos de demos
 
 ## Repos relacionados

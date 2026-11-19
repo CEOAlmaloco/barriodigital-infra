@@ -4,7 +4,7 @@ Corte del 18 de noviembre de 2026 (EP3.5-01). Se actualiza cuando se cierra cada
 
 Una fila está **implementada** solo si el comportamiento está en el código mergeado y, cuando corresponde a un servicio o al frontend, corre en el lab. Si falta evidencia, o si solo funciona en local, queda **parcial**. **No implementada** significa que el código de `develop` no hace esa función.
 
-EP3: el backlog EP3 está cerrado. El código de los servicios está en `develop` y el recorrido en la nube ([EP3-56](https://github.com/CEOAlmaloco/frontend-barriodigital/issues/166)) quedó cerrado. El inventario EP3 es histórico: ver [`INVENTARIO_EP3.md`](INVENTARIO_EP3.md). El trabajo nuevo va en el hito EP3.5.
+EP3: el backlog EP3 está cerrado. El código de los servicios está en `develop` y el recorrido en la nube ([EP3-56](https://github.com/CEOAlmaloco/frontend-barriodigital/issues/166)) quedó cerrado. El trabajo nuevo va en el hito EP3.5.
 
 | Estado | Significado |
 |---|---|

@@ -53,9 +53,3 @@
 | Documento | Qué |
 |---|---|
 | [`decisiones.md`](decisiones.md) | Entra ID, roles de prueba, limitaciones |
-
-## Histórico
-
-| Documento | Qué |
-|---|---|
-| [`INVENTARIO_EP3.md`](INVENTARIO_EP3.md) | Inventario EP3 marcado como histórico |
