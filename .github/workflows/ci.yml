@@ -21,17 +21,5 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Contratos de eventos (si existen)
-        run: |
-          if [ -f contracts/validate_event_schemas.py ]; then
-            python contracts/validate_event_schemas.py
-          else
-            echo "Sin contracts/validate_event_schemas.py — OK"
-          fi
-      - name: Enlaces internos docs (si existen)
-        run: |
-          if [ -f docs/check-internal-links.py ]; then
-            python docs/check-internal-links.py
-          else
-            echo "Sin docs/check-internal-links.py — OK"
-          fi
+      - name: Enlaces internos de docs
+        run: python docs/check-internal-links.py
