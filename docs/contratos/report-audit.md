@@ -342,7 +342,7 @@ Un valor fuera de esas listas responde 400, así el frontend puede usar listas d
 | **frontend** | Reportería con `kpis` y `top-procedures`, y "datos al" con `lastEventAt` | EP3-50 |
 | **frontend** | Auditoría con la búsqueda y el timeline por folio | EP3-51 |
 | **frontend** | Bloques de `/inicio` con el listado de plazos y la búsqueda de intervenciones | EP3-52 |
-| **frontend** | Mapa de trámites en `/reports`, con los totales, el aviso de recorte y la concentración por sector de la sección 3.8. El Funcionario entra solo al mapa | EP3-62 |
+| **frontend** | Mapa de trámites en `/reportes`, con los totales, el aviso de recorte y la concentración por sector de la sección 3.8. El Funcionario entra solo al mapa | EP3-62 |
 
 **Cambios en otros contratos:**
 
