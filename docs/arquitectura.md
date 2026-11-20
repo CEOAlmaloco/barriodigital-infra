@@ -1,7 +1,7 @@
 # Arquitectura — BarrioDigital
 
 EP1 (login → Gateway → BFF → requests → Oracle) más el recorte EP2/EP3 de mensajería: RabbitMQ, Kafka, report, audit y kafka-admin.  
-URLs y contratos: `decisiones.md`. Kafka operativo: `docs/kafka.md`.
+Contratos: `contratos/README.md`. Entra ID y roles: `decisiones.md`. Despliegue: `operacion/despliegue-aws.md`. Kafka operativo: `kafka.md`.
 
 ## Vista en 30 segundos
 
@@ -79,12 +79,12 @@ sequenceDiagram
 |------|-----------------|
 | **Entra ID** | Identidad, App Roles (`Admin`, `Funcionario`, `Vecino`, `Auditor`), emite JWT |
 | **Angular + MSAL** | Login/logout, guarda token, manda `Authorization: Bearer` al API Gateway (en local, al BFF) |
-| **API Gateway** | JWT Authorizer: firma, issuer, audience (GUID) y `exp`; 401 sin llamar al BFF. Solo enruta las rutas publicadas (`decisiones.md`) |
+| **API Gateway** | JWT Authorizer: firma, issuer, audience (GUID) y `exp`; 401 sin llamar al BFF. Solo enruta las rutas publicadas (`operacion/despliegue-aws.md`) |
 | **BFF** | Resource Server: vuelve a validar issuer, audience, firma y `exp`; roles → 403 en `/api/admin/**`; CORS; proxy a requests |
 | **requests** | CRUD trámites; filtra por dueño si es Vecino; **no** valida JWT (confía en headers del BFF) |
 | **Oracle** | Tabla de trámites; wallet fuera del repo |
 
-Contrato resumido (detalle en `decisiones.md`):
+Contrato resumido (detalle en `contratos/jwt.md`):
 
 - Issuer: `https://login.microsoftonline.com/<tenant>/v2.0`
 - Audience: GUID del client id (lo que traen los tokens v2); el BFF acepta además `api://<clientId>`

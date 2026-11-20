@@ -91,7 +91,7 @@ Plantilla en `.env.example`; los valores de Entra ID están en `../docs/decision
 
 ## Puertos
 
-- **BFF, 8080.** En producción el front no lo llama directo: las peticiones entran por el API Gateway, que las reenvía a este puerto (ver `../docs/decisiones.md`).
+- **BFF, 8080.** En producción el front no lo llama directo: las peticiones entran por el API Gateway, que las reenvía a este puerto (ver `../docs/operacion/despliegue-aws.md`).
 - **requests, 8081.** Los dos compose lo publican en el host (sirve para el health check local), así que en la EC2 el security group no debe abrir el 8081, solo el 8080.
 - **catalog, 8082.** Solo `expose`, sin `ports`. No se abre en el security group. El health se mira dentro del contenedor: `docker compose exec catalog curl -f http://localhost:8082/actuator/health`.
 - **notify, 8083.** Solo `expose`, sin `ports`, rutas públicas, BFF ni API Gateway. `docker compose exec notify curl -fsS http://localhost:8083/actuator/health`.

@@ -16,7 +16,6 @@
 | [`matriz-funcionalidades.md`](matriz-funcionalidades.md) | Estado vs `develop` |
 | [`evidencias/`](evidencias/) | Evidencias de demo |
 | [`checklist-parcial-5.md`](checklist-parcial-5.md) | Checklist Parcial 5 |
-| [`guion-demo.md`](guion-demo.md) | Guion de demo |
 
 ## Contratos por tema
 
