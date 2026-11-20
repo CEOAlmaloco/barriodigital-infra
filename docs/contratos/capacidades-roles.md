@@ -37,14 +37,14 @@ Los roles son los App Roles de Entra ID: `Admin`, `Funcionario`, `Vecino` y `Aud
 | Ver el estado del plazo (listado, detalle e `/inicio`) | No | Sí | Sí | Sí |
 | Administrar catálogo, cupos y plazos | No | No | Sí | No |
 | Administrar la mensajería (RabbitMQ y Kafka) | No | No | Sí | No |
-| Ver reportes (`/reports`) | No | Solo el mapa de trámites | Sí | Sí, solo lectura |
-| Ver auditoría (`/audit`) | No | No | Sí | Sí |
+| Ver reportes (`/reportes`) | No | Solo el mapa de trámites | Sí | Sí, solo lectura |
+| Ver auditoría (`/auditoria`) | No | No | Sí | Sí |
 
 Reglas que acompañan la matriz:
 
 1. **El Admin no toma trámites, los asigna.** Así "Mis asignados" y los KPIs por funcionario reflejan atención y no supervisión, y la lista de reasignación de EP3-05 queda sin ambigüedad. El destinatario de una asignación tiene que ser un Funcionario de esa lista, y EP3-05 define el error. El Admin igual puede operar cualquier trámite como intervención (sección 3).
 2. **El Auditor no tiene acciones.** Quien fiscaliza no opera.
-3. **Los indicadores de `/reports` son para el Admin y el Auditor.** Control interno revisa los indicadores de gestión. El Funcionario entra a `/reports` solo para el mapa de trámites (EP3-62), que le sirve para organizar el trabajo en terreno. Su vista principal sigue siendo la bandeja, y recibe los plazos de report en el listado, el detalle e `/inicio`.
+3. **Los indicadores de `/reportes` son para el Admin y el Auditor.** Control interno revisa los indicadores de gestión. El Funcionario entra a `/reportes` solo para el mapa de trámites (EP3-62), que le sirve para organizar el trabajo en terreno. Su vista principal sigue siendo la bandeja, y recibe los plazos de report en el listado, el detalle e `/inicio`.
 4. **Adjuntar después del alta:** nadie, en la prioridad Alta. Si entra EP3-64 (prioridad Media), el Vecino agrega fotos a un trámite abierto y ese contrato agrega su fila.
 5. **Funciones de prioridad Media y Baja** (comentario del vecino, cancelación, encuesta, exportación) agregan su fila en su propio contrato, si se cumple la fecha de corte del 17-nov.
 6. **Solo el Vecino crea.** requests también lo comprueba (principio 2): el staff que crea un trámite recibe 403 `Solo un Vecino puede crear un tramite`.
@@ -55,10 +55,13 @@ Reglas que acompañan la matriz:
 |---|---|
 | `/inicio` | Los cuatro roles |
 | `/tramites` y `/tramites/:id` | Los cuatro roles |
-| `/admin` | Admin |
-| `/reports` | Admin y Auditor. El Funcionario, solo el mapa de trámites |
-| `/audit` | Admin, Auditor |
-| `/no-access` (pantalla "sin acceso") | Sin rol, con más de un rol o con el token sin leer, con el motivo. Fuera del layout y sin navegación. Un rol válido que entra vuelve a `/inicio` |
+| `/administracion` | Admin |
+| `/reportes` | Admin y Auditor. El Funcionario, solo el mapa de trámites |
+| `/auditoria` | Admin, Auditor |
+| `/sin-acceso` (pantalla "sin acceso") | Sin rol, con más de un rol o con el token sin leer, con el motivo. Fuera del layout y sin navegación. Un rol válido que entra vuelve a `/inicio` |
+| `/legal/privacidad`, `/legal/accesibilidad` y `/legal/condiciones-de-uso` | Públicas, con o sin sesión. El pie de todas las pantallas las enlaza |
+
+Las rutas anteriores en inglés (`/admin`, `/reports`, `/reports/map`, `/audit` y `/no-access`) redirigen a las nuevas.
 
 **Roles por endpoint de report y audit** (EP3-07):
 
@@ -203,7 +206,7 @@ audit es **de solo lectura y de solo agregar** para todos los roles, incluido el
 1. La API de audit no tiene endpoints de escritura (EP3-07), y el servicio no ejecuta `UPDATE` ni `DELETE` sobre su tabla.
 2. El Admin no puede impedir que sus acciones lleguen a Oracle desde kafka-admin: no puede eliminar `audit.timeline`, ni adelantar los offsets de `audit-group`, ni bajar `min.compaction.lag.ms` (EP3-03, secciones 3.3, 4 y 6.4).
 
-El Admin ve `/audit`, que registra sus propias acciones, y eso no debilita la segregación de funciones, porque no puede modificar lo registrado. El límite a nivel de base de datos está en la sección 10.
+El Admin ve `/auditoria`, que registra sus propias acciones, y eso no debilita la segregación de funciones, porque no puede modificar lo registrado. El límite a nivel de base de datos está en la sección 10.
 
 ### 9. Cambios por capa
 
@@ -221,7 +224,7 @@ El Admin ve `/audit`, que registra sus propias acciones, y eso no debilita la se
 | **report** | La proyección de estado por trámite guarda `assigneeId` de `request.assigned`. El endpoint de plazos acepta `assignee=me`. Roles por endpoint | EP3-36, EP3-37, EP3-38 |
 | **audit** | Filtro `actorRole` en la búsqueda. Roles Admin y Auditor. Sin escritura | EP3-42 |
 | **frontend**, `shared/models/role.ts` | `REQUESTS_ROLES` incluye los cuatro roles. `resolveAccess` cuenta solo los cuatro roles, igual que el BFF | EP3-49 |
-| **frontend**, `app.routes.ts` y header | `/reports` y `/audit` para Admin y Auditor. Navegación del rol del usuario. Pantalla "sin acceso" con el motivo, sin rol o con más de uno | EP3-49 |
+| **frontend**, `app.routes.ts` y header | `/reportes` y `/auditoria` para Admin y Auditor. Navegación del rol del usuario. Pantalla "sin acceso" con el motivo, sin rol o con más de uno | EP3-49 |
 | **frontend**, detalle | Acciones por rol y por responsable, "Tomar" como acción principal, campo de motivo para el Admin, "En atención" y "Municipalidad" para el Vecino | EP3-46 |
 | **frontend**, `/inicio` | Bloques de la sección 7 | EP3-52 |
 | **Contratos** | EP3-05 define tomar, reasignar, la lista de funcionarios y su orden de errores. EP3-07 define los roles por endpoint de report y audit, `assignee=me` y `actorRole` | EP3-05, EP3-07 |
