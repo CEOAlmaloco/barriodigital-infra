@@ -32,6 +32,10 @@ Este archivo conserva solo decisiones de identidad, roles y limitaciones. **No c
 | vecino.test@cloudproyecto.onmicrosoft.com | Vecino |
 | auditor.test@cloudproyecto.onmicrosoft.com | Auditor |
 
+## Límites de servicios en EP3.5
+
+EP3.5 agrega un solo servicio, `ms-barriodigital-field` (puerto 8088), porque la EC2 de apps del laboratorio no admite más (ARQ-05, E2 del backlog). Personas, partes y adjuntos quedan en requests; configuración, territorio, unidades, directorio y puntos de atención en catalog; documentos generados y notificaciones en notify, que suma base de datos. Los eventos y comandos llevan identificadores de personas, no sus datos. Contrato: [`contratos/dominio-contextos.md`](contratos/dominio-contextos.md). Identidad: [`contratos/identidad.md`](contratos/identidad.md).
+
 ## Limitaciones conocidas (no bloqueantes)
 
 Notas de robustez detectadas durante el desarrollo, fuera de alcance de la EP1 por no representar fallas de los criterios de aceptación actuales.

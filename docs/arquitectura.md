@@ -1,7 +1,7 @@
 # Arquitectura — BarrioDigital
 
 EP1 (login → Gateway → BFF → requests → Oracle) más el recorte EP2/EP3 de mensajería: RabbitMQ, Kafka, report, audit y kafka-admin.  
-Contratos: `contratos/README.md`. Entra ID y roles: `decisiones.md`. Despliegue: `operacion/despliegue-aws.md`. Kafka operativo: `kafka.md`.
+Contratos: `contratos/README.md`. Límites de servicios previstos para EP3.5: `contratos/dominio-contextos.md`. Entra ID y roles: `decisiones.md`. Despliegue: `operacion/despliegue-aws.md`. Kafka operativo: `kafka.md`.
 
 ## Vista en 30 segundos
 
