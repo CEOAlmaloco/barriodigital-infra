@@ -1,6 +1,6 @@
 ## Contrato: integraciones diferidas (EP3.5-02)
 
-Define las integraciones que EP3.5 deja fuera de alcance, la interfaz prevista de cada una y la condición que la habilitaría. Ninguna se implementa en el laboratorio: no hay convenios, sistemas municipales reales ni tipos de trámite que las exijan (sección 2.6 del catálogo). ClaveÚnica está en [`identidad.md`](identidad.md), sección 4. Las plataformas de comunicación y documentos del Estado (CasillaÚnica, FirmaGob, DocDigital) son de EP3.5-03.
+Define las integraciones que EP3.5 deja fuera de alcance, la interfaz prevista de cada una y la condición que la habilitaría. Ninguna se implementa en el laboratorio: no hay convenios, sistemas municipales reales ni tipos de trámite que las exijan (sección 2.6 del catálogo). ClaveÚnica está en [`identidad.md`](identidad.md), sección 4. CasillaÚnica y DocDigital están en [`comunicaciones.md`](comunicaciones.md), sección 9, y FirmaGob en [`documentos.md`](documentos.md), sección 4.
 
 ### 1. Regla común
 

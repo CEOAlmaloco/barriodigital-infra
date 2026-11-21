@@ -71,7 +71,7 @@ El **inicio** depende de un solo evento, `request.created`. Para detener el plaz
 3. **El conteo parte el día hábil siguiente** al día del alta, o al día en que se entiende hecha.
 4. **`dueDate` es el día hábil número N** del conteo, con N = `slaBusinessDays`. Es una fecha (`LocalDate`) en `America/Santiago`, no un instante. Como solo se cuentan días hábiles, `dueDate` siempre es hábil, y la prórroga del art. 25 cuando el último día es inhábil ocurre sola.
 5. **Las reglas 2 y 3 usan el mismo calendario** de la sección 3. Nadie implementa "inhábil = sábado o domingo" en una parte y con feriados en la otra.
-6. **Sin pausas.** El plazo corre en todos los estados abiertos y se detiene en `RESUELTO`, `RECHAZADO` o `CANCELADO` (sección 2.3).
+6. **Sin pausas.** El plazo corre en todos los estados abiertos y se detiene en `RESUELTO`, `RECHAZADO` o `CANCELADO` (sección 2.3). La suspensión, la prórroga y los cierres nuevos de EP3.5 están en [`procedimiento-plazos.md`](procedimiento-plazos.md) (EP3.5-22).
 7. **Se mide con la hora del hecho**, el `occurredAt`, no con la llegada a Kafka (EP3-01, sección 4). Un evento atrasado por el outbox no mueve el plazo.
 
 Ejemplos, con un plazo de 5 días y sin feriados en esa semana:
@@ -295,6 +295,6 @@ La fila "Ver el estado del plazo" de la matriz de EP3-04 sigue en No para el Vec
 1. **Trámites anteriores a EP3-31** (por plazo): no aparecen en los KPIs ni en los plazos, tampoco en "estados activos", aunque sigan abiertos. El timeline de audit de esos trámites empieza en el despliegue. Mejora futura: un backfill con eventos marcados como reconstruidos.
 2. **Un feriado nuevo se aplica después del redeploy de report** (por diseño).
 3. **Un trámite cerrado mientras faltaba un año en el calendario** conserva su evaluación, aunque se haya hecho solo con fines de semana (por diseño, para no reescribir resultados ya informados).
-4. **Sin pausas** (por diseño): si el trámite espera una respuesta del vecino, por ejemplo una gestión con resultado `NO_CONTESTA`, el plazo sigue corriendo. Mejora futura: suspensión con motivo.
+4. **Sin pausas** (por diseño): si el trámite espera una respuesta del vecino, por ejemplo una gestión con resultado `NO_CONTESTA`, el plazo sigue corriendo. Mejora futura: suspensión con motivo ([`procedimiento-plazos.md`](procedimiento-plazos.md), sección 3).
 5. **Entre las 00:00 y las 00:05**, un trámite que acaba de vencer se ve con el estado del día anterior.
-6. **El Vecino ve el plazo en días, no la fecha** (por plazo). Mejora futura: que el BFF obtenga el trámite de requests, que controla la propiedad, y después la `dueDate` de report por `requestId`.
+6. **El Vecino ve el plazo en días, no la fecha** (por plazo). Mejora futura: que el BFF obtenga el trámite de requests, que controla la propiedad, y después la `dueDate` de report por `requestId` ([`procedimiento-plazos.md`](procedimiento-plazos.md), sección 6).

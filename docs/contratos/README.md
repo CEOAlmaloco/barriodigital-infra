@@ -33,3 +33,7 @@ Contratos vigentes extraídos de `decisiones.md` (EP3.5-01 / CAL-02). El conteni
 | Identidad interna y proveedores | [`identidad.md`](identidad.md) |
 | Servicio de terreno | [`field.md`](field.md) |
 | Integraciones diferidas | [`integraciones-diferidas.md`](integraciones-diferidas.md) |
+| Estados y transiciones del trámite | [`procedimiento-estados.md`](procedimiento-estados.md) |
+| Plazos del procedimiento, suspensión y prórroga | [`procedimiento-plazos.md`](procedimiento-plazos.md) |
+| Matriz de comunicaciones | [`comunicaciones.md`](comunicaciones.md) |
+| Catálogo de documentos | [`documentos.md`](documentos.md) |

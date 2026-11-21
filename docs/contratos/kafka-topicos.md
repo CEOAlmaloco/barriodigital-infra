@@ -18,6 +18,8 @@ Cómo se publican y se consumen estos eventos (outbox, relay, reintentos, DLT e 
 
 report y audit leen `requests.events` con grupos distintos, así que cada uno recibe todos los eventos. Dentro de un mismo grupo, las particiones se reparten entre las instancias.
 
+EP3.5 suma los tópicos `field.events` ([`dominio-contextos.md`](dominio-contextos.md), sección 5.1) y `notify.events` ([`comunicaciones.md`](comunicaciones.md), sección 8), con los mismos parámetros que `requests.events`.
+
 Hay una DLT por consumidor y no una por tópico: `requests.events` tiene dos consumidores, y una sola DLT mezclaría sus fallas.
 
 Solo kafka-admin crea tópicos. El broker tiene `auto.create.topics.enable=false`, y los demás servicios no declaran `NewTopic` y llevan `spring.kafka.admin.auto-create=false`.
@@ -336,6 +338,8 @@ Los permisos y el motivo se definen en EP3-05.
 ```
 
 En una primera asignación, el mismo evento lleva `previousAssigneeId` y `reason` en `null`.
+
+Los tipos de evento del procedimiento de EP3.5 (subsanación, desistimiento, duplicados, derivación, reapertura, recursos, suspensión y prórroga) están en [`procedimiento-estados.md`](procedimiento-estados.md), sección 8, y [`procedimiento-plazos.md`](procedimiento-plazos.md), sección 8.
 
 ### 7. Eventos de `audit.timeline`
 

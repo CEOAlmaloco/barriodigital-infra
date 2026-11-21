@@ -103,7 +103,7 @@ Toda orden que no es `VALIDADA` ni `CANCELADA` puede pasar a `CANCELADA`.
 | `EJECUTADA` → `POR_REPROGRAMAR` | Jefatura | Gestionar órdenes | `failure_reason = VALIDACION_RECHAZADA` y motivo obligatorio |
 | Cualquiera activa → `CANCELADA` | Jefatura, o field al leer un trámite terminal | Gestionar órdenes | Motivo obligatorio |
 
-**Plazo de aceptación.** `acceptance_due_at` es el momento de la asignación más 4 horas corridas, configurable en field. Si vence, la orden sigue `ASIGNADA` y la jefatura recibe una alerta para reasignarla (EP3.5-24, criterio 4). El canal de la alerta lo define EP3.5-03.
+**Plazo de aceptación.** `acceptance_due_at` es el momento de la asignación más 4 horas corridas, configurable en field. Si vence, la orden sigue `ASIGNADA` y la jefatura recibe una alerta para reasignarla (EP3.5-24, criterio 4), en `/inicio` ([`comunicaciones.md`](comunicaciones.md), fila P08).
 
 **Capacidad.** Asignar una orden a una cuadrilla que ya tiene `daily_capacity` órdenes para ese `scheduled_for` responde 409. La jefatura elige otro día u otra cuadrilla.
 
@@ -165,15 +165,17 @@ requests consume `field.events` y guarda el último estado de cada orden de sus 
 
 Una orden rechazada que vuelve a `CREADA` sigue activa: el trámite sigue `EN_TERRENO` hasta que la jefatura la reasigna o la cancela.
 
-Los cambios derivados se registran en el historial con el actor del evento de field. EP3.5-03 incorpora estas transiciones a la máquina de estados del trámite. Cuando field está desplegado, el personal deja de cambiar a `EN_TERRENO` a mano y requests deja de publicar `crew.ticket`.
+Los cambios derivados se registran en el historial con el actor del evento de field. Son las transiciones T10 y T11 de la máquina de estados del trámite ([`procedimiento-estados.md`](procedimiento-estados.md), sección 4.5). Cuando field está desplegado, el personal deja de cambiar a `EN_TERRENO` a mano y requests deja de publicar `crew.ticket`.
 
 #### 6.3 Trámite terminal
 
-field consume `request.status-changed` y `request.cancelled`. Cuando un trámite pasa a `RECHAZADO` o `CANCELADO` (y a los estados terminales que agregue EP3.5-03, como el desistimiento):
+field consume `request.status-changed`, `request.cancelled`, `request.withdrawn`, `request.closed-without-contact`, `request.marked-duplicate` y `request.referred`. Cuando un trámite pasa a `RECHAZADO`, `CANCELADO`, `DESISTIDO`, `CERRADO_SIN_CONTACTO`, `DUPLICADO` o `DERIVADO` ([`procedimiento-estados.md`](procedimiento-estados.md), sección 2):
 - field quita el trámite de sus órdenes activas;
 - una orden que queda sin trámites pasa a `CANCELADA`, con el actor del evento de requests y el motivo `Tramite cerrado: <folio>`.
 
-La unidad recibe el aviso que define EP3.5-03 (EP3.5-24, criterio 7).
+La jefatura de la unidad recibe el aviso de la fila P06 de [`comunicaciones.md`](comunicaciones.md) (EP3.5-24, criterio 7).
+
+Un trámite reabierto (`request.reopened`) no reactiva las órdenes canceladas: la jefatura crea una orden nueva si hace falta.
 
 ### 7. Eventos de `field.events`
 

@@ -185,4 +185,4 @@ El cliente de RabbitMQ usa un timeout de conexión de 2 segundos. Publicar es as
 
 - No hay outbox. Si el broker está caído en el momento de publicar, el evento se pierde. Solo queda el log. Es el costo de no hacer esperar al HTTP.
 - La idempotencia vive en la memoria de notify. Si ese proceso se reinicia, olvida los `eventId` ya vistos y puede repetir un correo o un PDF.
-- Si el vecino desactivó los avisos por correo (EP3-65), `email.rejected` no se publica, igual que los demás `email.*`.
+- Si el vecino desactivó los avisos por correo (EP3-65), `email.rejected` no se publica, igual que los demás `email.*`. Con EP3.5-23 el rechazo pasa a ser una comunicación `FORMAL`, que no se desactiva ([`comunicaciones.md`](comunicaciones.md), sección 4.3).
