@@ -198,7 +198,7 @@ Criterios:
 1. **Cada bloque carga y falla por separado.** Si report está caído, el Funcionario sigue viendo su bandeja de requests, y el bloque de plazos muestra "no disponible". Es el "sin bloquear el core" del caso base, llevado a la pantalla.
 2. **Estados vacíos explícitos por bloque**, por ejemplo "No tienes trámites asignados", distintos del estado "no disponible" cuando la fuente falla. "Requiere atención" es la excepción: si sus fuentes respondieron y no hay nada que atender, no se muestra. Si una falla, aparece con ese aviso y la opción de reintentar.
 3. **Polling solo en los KPIs del Admin** (K8). Se pausa con la pestaña oculta (`visibilitychange`), se detiene al salir de `/inicio`, y ante errores espera más entre intentos en vez de insistir cada 5 s. Los demás bloques cargan al entrar, con botón de actualizar y el `lastEventAt` donde la fuente es report.
-4. **Cada bloque enlaza a su vista completa** con los filtros en la URL (EP3-48). Por ejemplo, "Mis asignados" abre `/tramites` con `assignee=me` y `open=true`, y la DLQ de "Requiere atención" abre `/administracion` con `seccion=rabbitmq` y `mostrar=dlq`.
+4. **Cada bloque enlaza a su vista completa** con los filtros en la URL (EP3-48). Por ejemplo, "Mis asignados" abre `/tramites` con `assignee=me` y `open=true`, y la DLQ de "Requiere atención" abre `/administracion` con `section=rabbitmq` y `show=dlq`.
 5. **Sin rol o con más de un rol** no hay `/inicio`, sino la pantalla "sin acceso".
 
 ### 8. Auditoría de solo lectura
