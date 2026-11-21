@@ -42,19 +42,6 @@ Cada broker tiene dos listeners: `INTERNAL` (9092 dentro de la red del compose, 
 | `KAFKA_UI_BIND_ADDRESS` | Bind del host para la UI. Local: `127.0.0.1`. |
 | `KAFKA_UI_USER`, `KAFKA_UI_PASSWORD` | Login de Kafka UI. |
 
-## Seed de demo (eventos + DLT + lag)
-
-Con el clúster arriba y los tópicos de sistema creados por kafka-admin:
-
-```powershell
-# desde la raíz de barriodigital-infra
-.\scripts\seed-messaging.ps1 -Target kafka
-# o ambos brokers:
-.\scripts\seed-messaging.ps1
-```
-
-Publica eventos de contrato en `requests.events` / `audit.timeline`, mensajes en DLT y el grupo `seed-demo-group` (con lag) para el panel Admin.
-
 ## Comandos CLI
 
 ```bash

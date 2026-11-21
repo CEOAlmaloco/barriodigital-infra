@@ -207,3 +207,20 @@ Esta revisión es manual: corregir cualquier recurso o enlace faltante antes de 
 el orden entre servicios.
 
 Las pruebas y el resumen de integración se documentan en el repo `ms-barriodigital-requests` → `README.md`.
+
+## Carga de demostración
+
+Con apps, mq y kafka levantados, desde la raíz del repo:
+
+```powershell
+.\apps\scripts\seed-demo.ps1                       # todo
+.\apps\scripts\seed-demo.ps1 -Target requests -Count 20
+```
+
+| `-Target` | Qué hace | Dónde se ve |
+|---|---|---|
+| `requests` | Crea `-Count` trámites (12 por omisión) por la API de requests a nombre de un vecino de prueba y cancela uno de cada cuatro. Salen los eventos de Kafka y los comandos de RabbitMQ del flujo real | `/tramites`, Inicio, Reportes y Auditoría |
+| `rabbit` | Publica en `cmd.topic` y `cmd.direct` un comando por cola sin un dato obligatorio. notify lo rechaza y queda en la DLQ con sus headers `x-death` | Administración → RabbitMQ |
+| `kafka` | Produce 3 mensajes sin `eventType` en `requests.events` (demo "Malformado" de [`docs/kafka.md`](../docs/kafka.md)). report y audit los envían a su DLT | Administración → Kafka |
+
+Los trámites no pasan por el BFF, igual que la colección de Postman: no llevan plazo (`slaBusinessDays` nulo) porque el plazo lo copia el BFF desde catalog. Al no admitirse, no reservan cupo. La carga no escribe en `audit.timeline`; lo que se ve en Auditoría son los eventos reales de esos trámites.

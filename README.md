@@ -63,5 +63,3 @@ Kafka sigue sin `up` funcional.
 | `ms-barriodigital-report` | `:8086` — KPIs / SLA desde `requests.events` |
 | `ms-barriodigital-audit` | `:8087` — auditoría / timeline (Kafka) |
 | `barriodigital-infra` | este repo — compose apps/mq/kafka + docs |
-
-Seed de demo (colas / eventos para Admin): `.\scripts\seed-messaging.ps1` (ver `mq/README.md` y `kafka/README.md`).

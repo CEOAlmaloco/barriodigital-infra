@@ -23,19 +23,6 @@ docker compose -f mq/compose.yml --env-file mq/.env ps
 
 El `.env` no se sube a git. Sin él, Compose se detiene y pide las tres variables.
 
-## Seed de demo (mensajes en colas / DLQ)
-
-Con el clúster arriba y las colas ya declaradas por notify/requests:
-
-```powershell
-# desde la raíz de barriodigital-infra
-.\scripts\seed-messaging.ps1 -Target rabbit
-# opcional: vaciar antes
-.\scripts\seed-messaging.ps1 -Target rabbit -PurgeFirst
-```
-
-Publica mensajes de contrato en `q.cmd.*` y en las DLQ. notify puede consumir las colas vivas; las DLQ se quedan para el panel Admin.
-
 ## Ver el estado
 
 ```powershell
