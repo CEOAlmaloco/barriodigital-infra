@@ -24,21 +24,42 @@ No hay actualizar. En RabbitMQ una cola no se edita: hay que borrarla y crearla 
 
 ### 2. Cola
 
-`GET /api/mq/queues` devuelve todas, también las de la topología. `messages` es el total (listos más sin confirmar). `consumers` es cuántos hay conectados.
+`GET /api/mq/queues` devuelve todas, también las de la topología. Los datos salen del Management HTTP API de RabbitMQ en el momento de la consulta: mq-admin no guarda historia.
 
 ```json
 [
   {
     "name": "q.cmd.email",
     "messages": 2,
+    "messagesReady": 2,
+    "messagesUnacked": 0,
     "consumers": 1,
     "durable": true,
     "ttl": null,
     "deadLetterExchange": "cmd.dead.dlx",
-    "deadLetterRoutingKey": "email.dead"
+    "deadLetterRoutingKey": "email.dead",
+    "state": "running",
+    "memoryBytes": 55304,
+    "publishRate": 0.4,
+    "deliverRate": 0.4,
+    "ackRate": 0.4
   }
 ]
 ```
+
+| Campo | Tipo | Nulo | Nota |
+|---|---|---|---|
+| `name` | string | No | |
+| `messages` | entero | No | Total: listos más sin confirmar |
+| `messagesReady` | entero | No | Listos para entregar (`messages_ready`). 0 si el Management no lo informa |
+| `messagesUnacked` | entero | No | Entregados sin confirmar (`messages_unacknowledged`). 0 si el Management no lo informa |
+| `consumers` | entero | No | Consumidores conectados |
+| `durable` | boolean | No | |
+| `ttl` | entero, ms | Sí | `x-message-ttl`; nulo si la cola no lo tiene |
+| `deadLetterExchange`, `deadLetterRoutingKey` | string | Sí | `x-dead-letter-exchange` y `x-dead-letter-routing-key`; nulos si no están |
+| `state` | string | Sí | Estado que informa RabbitMQ, por ejemplo `running` o `idle` |
+| `memoryBytes` | entero | Sí | Memoria de la cola en bytes |
+| `publishRate`, `deliverRate`, `ackRate` | número, mensajes/s | Sí | Tasas instantáneas de publicación, entrega y confirmación. Nulas si la cola aún no tiene estadísticas de mensajes |
 
 `GET /api/mq/queues/{name}` devuelve el mismo objeto. 404 si no existe.
 
@@ -54,7 +75,7 @@ No hay actualizar. En RabbitMQ una cola no se edita: hay que borrarla y crearla 
 }
 ```
 
-`durable` es opcional y vale `true` si se omite. `ttl` es opcional: si no viene, la cola no tiene `x-message-ttl`. `deadLetterExchange` y `deadLetterRoutingKey` son opcionales y se escriben como `x-dead-letter-exchange` y `x-dead-letter-routing-key`. La routing key de dead-letter solo se acepta si viene el exchange. Respuesta 201 con la misma forma del GET y `messages` y `consumers` en 0. Si el nombre ya existe, 409, aunque los argumentos coincidan.
+`durable` es opcional y vale `true` si se omite. `ttl` es opcional: si no viene, la cola no tiene `x-message-ttl`. `deadLetterExchange` y `deadLetterRoutingKey` son opcionales y se escriben como `x-dead-letter-exchange` y `x-dead-letter-routing-key`. La routing key de dead-letter solo se acepta si viene el exchange. Respuesta 201 con la misma forma del GET: los contadores en 0 y `state`, `memoryBytes` y las tasas en `null`. Si el nombre ya existe, 409, aunque los argumentos coincidan.
 
 `DELETE /api/mq/queues/{name}` borra la cola. `DELETE /api/mq/queues/{name}/messages` la vacía y no la borra. Vaciar una cola que ya está en cero también responde 204.
 
