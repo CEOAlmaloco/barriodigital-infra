@@ -6,7 +6,7 @@ import re
 import sys
 from pathlib import Path
 
-ROOT = Path(r"C:\Users\alm\OneDrive\6tosemestre\cloud\MICROSERVICIOS\barriodigital-infra\docs")
+ROOT = Path(__file__).resolve().parent
 LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
 
 
@@ -32,6 +32,9 @@ def main() -> int:
             if not resolved.exists():
                 broken.append(f"{md.relative_to(ROOT)} -> {target}")
     print(f"checked={checked} broken={len(broken)}")
+    if checked == 0:
+        print("FAIL: no se revisó ningún enlace")
+        return 1
     for b in broken:
         print("BROKEN", b)
     return 1 if broken else 0
