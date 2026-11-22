@@ -236,7 +236,7 @@ El Admin ve `/auditoria`, que registra sus propias acciones, y eso no debilita l
 
 1. **Ingreso asistido:** un funcionario de ventanilla u OIRS no puede ingresar un trámite a nombre de un vecino que llega en persona, aunque la Ley 19.880 lo contempla. Exige separar al solicitante del actor y capturar sus datos de contacto. Es un cambio de modelo en requests.
 2. **Sin segmentación por unidad:** Entra ID entrega el rol, no la oficina ni el sector del funcionario. Todos los funcionarios ven todos los trámites de la comuna. Mejora futura: un grupo de Entra ID o un atributo por unidad.
-3. **Plazo para el Vecino** (actualizado por EP3-06): ve el plazo en días hábiles (`slaBusinessDays`), no la fecha límite ni el estado del plazo, que calcula report. Mejora futura: mostrarle `dueDate` (EP3-06, límite 6).
+3. **Plazo para el Vecino** (actualizado por EP3-06): ve el plazo en días hábiles (`slaBusinessDays`), no la fecha límite ni el estado del plazo, que calcula report. Mejora futura: mostrarle `dueDate`, como fecha comprometida ([`procedimiento-plazos.md`](procedimiento-plazos.md), sección 6; EP3.5-22).
 4. **Evidencia de resolución:** el Funcionario no adjunta una foto del trabajo terminado.
 5. **Colaboración entre funcionarios:** otro Funcionario no puede registrar una gestión en un trámite ajeno. El responsable reasigna, o el Admin interviene.
 6. **Abstención (artículo 12 de la Ley 19.880):** la plataforma no detecta conflictos de interés. Con un rol por usuario, un Funcionario o un Admin no puede ser solicitante al crear, y el único caso posible es que el rol de un usuario cambie en Entra ID después de ingresar un trámite. Las causales de abstención dependen de la declaración del funcionario.

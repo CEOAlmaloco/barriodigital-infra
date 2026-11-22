@@ -37,8 +37,9 @@ flowchart LR
 
   REQ -->|requests.events| K[(Kafka)]
   FLD -->|field.events| K
+  NTY -->|notify.events| K
   CAT -->|audit.timeline| K
-  K -->|field.events| REQ
+  K -->|field.events · notify.events| REQ
   K -->|requests.events| FLD
   K --> REP & AUD
 
@@ -52,12 +53,12 @@ Las flechas punteadas son las llamadas internas de la sección 4.
 
 | Contexto | Servicio | Dueño de | API | Publica | Consume | Consistencia |
 |---|---|---|---|---|---|---|
-| Trámite y personas | requests | Trámite, historial, asignación, gestiones, preferencias, personas y su contacto, partes del trámite, relaciones entre trámites, adjuntos y referencias externas | `/api/requests/**`, `/api/persons/**` | `requests.events`; comandos de RabbitMQ a notify | `field.events` (`requests-group`) | Fuerte dentro de un trámite, con la transacción y el bloqueo de EP3-02. Eventual hacia report, audit, field y notify |
+| Trámite y personas | requests | Trámite, historial, asignación, gestiones, preferencias, personas y su contacto, partes del trámite, relaciones entre trámites, adjuntos y referencias externas | `/api/requests/**`, `/api/persons/**` | `requests.events`; comandos de RabbitMQ a notify | `field.events` y `notify.events` (`requests-group`) | Fuerte dentro de un trámite, con la transacción y el bloqueo de EP3-02. Eventual hacia report, audit, field y notify |
 | Configuración y territorio | catalog | Tipos de trámite, cupos, plazos, calendario, sectores, unidades municipales, directorio de personal y puntos de atención | `/api/catalog/**` | `audit.timeline`, con antes y después de cada cambio (convención 13) | - | Fuerte en su base. Quien usa un dato de catalog guarda su id y, si lo necesita para la historia, un snapshot |
 | Terreno | field | Cuadrillas, integrantes, especialidades, órdenes de trabajo y visitas | `/api/field/**` | `field.events`; `audit.timeline` para la configuración de cuadrillas | `requests.events` (`field-group`) | Fuerte dentro de una orden. Eventual con requests en ambos sentidos |
-| Comunicaciones y documentos | notify | Registro de envíos, documentos generados y sus versiones, y plantillas (EP3.5-27 y EP3.5-29) | `/api/notify/**` (EP3.5-11 y EP3.5-29) | Los eventos de entrega los define EP3.5-03 | Comandos de RabbitMQ | Eventual. La idempotencia pasa a ser persistente (ARQ-02, EP3.5-10) |
+| Comunicaciones y documentos | notify | Registro de envíos, documentos generados y sus versiones, y plantillas (EP3.5-27 y EP3.5-29) | `/api/notify/**` (EP3.5-11 y EP3.5-29) | `notify.events`, con el resultado de cada envío ([`comunicaciones.md`](comunicaciones.md), sección 8) | Comandos de RabbitMQ | Eventual. La idempotencia pasa a ser persistente (ARQ-02, EP3.5-10) |
 | Analítica | report | Proyecciones de KPIs, plazos y órdenes | `/api/report/**` | - | `requests.events`, `field.events` (`report-group`) | Eventual. Reconstruible desde los tópicos |
-| Auditoría | audit | Registro histórico de eventos | `/api/audit/**` | - | `requests.events`, `audit.timeline`, `field.events` (`audit-group`) | Eventual. Registro definitivo en Oracle |
+| Auditoría | audit | Registro histórico de eventos | `/api/audit/**` | - | `requests.events`, `audit.timeline`, `field.events`, `notify.events` (`audit-group`) | Eventual. Registro definitivo en Oracle |
 | Mensajería | mq-admin, kafka-admin | Ningún dato de dominio | Las de EP3-03 y EP2 | `audit.timeline` | - | No aplica |
 | Borde | BFF | Ningún dato propio. Resuelve la identidad interna, aplica capacidades y compone vistas | `/api/**` pública | - | - | Sin estado |
 
@@ -73,8 +74,9 @@ Fuera de los proxies del BFF, solo existen estas llamadas. Usan rutas `/internal
 | BFF | catalog | Resolver al funcionario en el directorio (EP3.5-14) | 503 |
 | field | requests | Validar los trámites de una orden nueva y tomar su snapshot de terreno (`field.md`, sección 4) | La orden no se crea y la API responde 503 |
 | notify | requests | Obtener el contacto vigente de la persona destinataria al momento de enviar | El comando se reintenta según EP2-03 y, agotados los reintentos, va a su DLQ. No se envía sin destino |
+| requests | catalog | Reservar cupo al admitir desde la lista de espera (`procedimiento-estados.md`, sección 6.3; EP3.5-35) | El trámite sigue en espera, sin perder su lugar, y se reintenta el día hábil siguiente |
 
-notify no guarda una copia del contacto. Su registro de envío conserva el destino usado en cada envío, porque es la prueba de la comunicación (EP3.5-03 define qué envíos la necesitan).
+notify no guarda una copia del contacto. Su registro de envío conserva el destino completo usado en las comunicaciones `FORMAL`, porque es la prueba de la comunicación, y solo el destino enmascarado en las demás ([`comunicaciones.md`](comunicaciones.md), sección 4.6).
 
 ### 5. Mensajería
 
@@ -104,7 +106,7 @@ La transición la hace EP3.5-15, en este orden:
 2. requests envía los dos campos.
 3. requests deja de enviar `solicitanteEmail`.
 
-La matriz de qué se comunica en cada paso es de EP3.5-03.
+El comando `notification.requested` sigue la misma transición, con `recipientPersonId` y `recipientEmail`. La matriz de qué se comunica en cada paso está en [`comunicaciones.md`](comunicaciones.md).
 
 #### 5.4 El actor en los eventos
 
@@ -118,7 +120,7 @@ La matriz de qué se comunica en cada paso es de EP3.5-03.
 | Un evento llega dos veces | Cada consumidor lo reconoce por `eventId` (EP3-02, sección 9) |
 | Eventos de dos órdenes del mismo trámite llegan intercalados | requests mantiene el estado de cada orden con su `sequence` y deriva el estado del trámite del conjunto (`field.md`, sección 6) |
 | requests no responde cuando notify resuelve un contacto | Reintentos y DLQ (sección 4). El aviso queda pendiente, no perdido |
-| La persona no tiene un contacto para el canal | notify registra el envío como no realizado por falta de destino. La alternativa la define EP3.5-03 |
+| La persona no tiene un contacto para el canal | notify registra el envío `SIN_DESTINO`. Una comunicación `FORMAL` queda pendiente por otro medio ([`comunicaciones.md`](comunicaciones.md), sección 4.5) |
 | field no responde | Las órdenes no se crean ni avanzan. Los trámites siguen operables en todo lo que no depende de terreno |
 
 ### 7. Límites conocidos

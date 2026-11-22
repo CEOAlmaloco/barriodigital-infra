@@ -14,6 +14,7 @@ erDiagram
   MUNICIPAL_REQUEST ||--o{ REQUEST_RELATION : "origen"
   MUNICIPAL_REQUEST ||--o{ ATTACHMENT : "adjunta"
   MUNICIPAL_REQUEST ||--o{ EXTERNAL_REF : "referencia"
+  MUNICIPAL_REQUEST ||--o{ REQUEST_APPEAL : "recurrido"
   REQUEST_PARTY }o--o| ATTACHMENT : "poder"
 
   ORG_UNIT ||--o{ ORG_UNIT : "depende de"
@@ -32,7 +33,7 @@ erDiagram
 
 | Servicio | Entidades |
 |---|---|
-| requests | `municipal_requests`, `person`, `person_contact`, `request_party`, `request_relation`, `attachment`, `external_ref` |
+| requests | `municipal_requests`, `person`, `person_contact`, `request_party`, `request_relation`, `attachment`, `external_ref`, `request_appeal` |
 | catalog | `org_unit`, `staff_member`, `service_point` |
 | field | `crew` y `work_order`, con sus tablas de detalle (`field.md`) |
 | notify | `document` |
@@ -79,7 +80,7 @@ Un medio de contacto de la persona.
 | `verified_at` | instant | Con valor solo si `verification_status` es o fue `VERIFICADO` |
 | `preferred` | boolean | A lo más un contacto preferido por tipo y persona |
 
-Único por `person_id`, `type` y `value`. Si la persona registra un correo rebotado otra vez, se reutiliza la misma fila y vuelve a `DECLARADO`. EP3.5-15 define la verificación por código y la acción ante un rebote. EP3.5-03 define cuándo un contacto `DECLARADO` sirve para avisar (E9: el teléfono solo si está verificado).
+Único por `person_id`, `type` y `value`. Si la persona registra un correo rebotado otra vez, se reutiliza la misma fila y vuelve a `DECLARADO`. EP3.5-15 define la verificación por código y la acción ante un rebote. Cuándo un contacto sirve para avisar está en [`comunicaciones.md`](comunicaciones.md), sección 4.1: un correo `DECLARADO` sirve, y un teléfono solo si está verificado (E9).
 
 #### 3.3 `request_party`
 
@@ -98,7 +99,7 @@ El papel de una persona en un trámite.
 Reglas:
 - **Un titular por trámite.** Siempre hay exactamente una fila `TITULAR`.
 - **Único** por `request_id`, `person_id` y `role`.
-- **Quién actúa.** Solo un `TITULAR` o un `REPRESENTANTE` con `link_status = VINCULADA` ve el trámite completo y actúa sobre él (calificar, cancelar, comentar). `INTERESADO` y `ADHERENTE` reciben los avisos que defina EP3.5-03 y ven solo la versión pública del historial.
+- **Quién actúa.** Solo un `TITULAR` o un `REPRESENTANTE` con `link_status = VINCULADA` ve el trámite completo y actúa sobre él (calificar, cancelar, comentar). `INTERESADO` y `ADHERENTE` reciben las comunicaciones del destinatario `PUBLICO` ([`comunicaciones.md`](comunicaciones.md), sección 2) y ven solo la versión pública del historial.
 - **Ingreso asistido.** Cuando la oficina registra un trámite con un RUN declarado que coincide con una persona con cuenta, la parte queda `PENDIENTE_CONFIRMACION`. El trámite aparece al vecino solo cuando confirma, y la confirmación queda en el historial (EP3.5-15, criterio 8).
 - **Ningún evento lleva datos de la parte**, solo `personId` y `role`.
 
@@ -158,8 +159,34 @@ Un identificador del trámite en un sistema municipal externo, como la Oficina d
 | `org_unit_id` | EP3.5-14 | Unidad responsable, según el enrutamiento por tipo y sector (E9) |
 | `intake_channel` | EP3.5-16 | `WEB`, `PRESENCIAL`, `TELEFONO` o `CORREO` |
 | `service_point_id` | EP3.5-16 | Punto de atención donde se ingresó. Nulo en `WEB` |
+| `status_before` | EP3.5-23 y EP3.5-30 | Estado al que vuelve desde `EN_SUBSANACION` o `DUPLICADO` (`procedimiento-estados.md`, sección 6.1). Nulo en los demás estados |
+| `remedy_due_date` | EP3.5-23 | Último día para aportar antecedentes. Nulo hasta la fecha de efecto del requerimiento (`procedimiento-plazos.md`, sección 2) |
+| `withdrawal_reason` | EP3.5-23 | `DESISTIMIENTO_TITULAR` o `SUBSANACION_VENCIDA`. Solo en `DESISTIDO` |
+| `reopen_count` | EP3.5-32 | Reaperturas del trámite, desde 0 |
+| `public_response` | EP3.5-23 | Respuesta pública del último cierre (`procedimiento-estados.md`, sección 5) |
 
-`solicitante_id`, `solicitante_nombre` y `solicitante_email` se eliminan con la migración de la sección 6.
+`solicitante_id`, `solicitante_nombre` y `solicitante_email` se eliminan con la migración de la sección 7.
+
+#### 3.8 `request_appeal`
+
+Un recurso contra el cierre de un trámite (EP3.5-32, `procedimiento-estados.md`, sección 7).
+
+| Columna | Tipo | Regla |
+|---|---|---|
+| `id` | uuid | PK. Es el `appealId` |
+| `request_id` | uuid | FK a `municipal_requests` |
+| `type` | enum | `REPOSICION` o `REVISION` |
+| `against_status` | enum | El estado de cierre recurrido |
+| `filed_by_person_id` | uuid | La parte que lo presentó |
+| `grounds` | string(2000) | Fundamentos de la parte. No viaja en eventos |
+| `due_date` | fecha | Último día para resolver |
+| `reviewer_staff_id` | uuid | Quien revisa. Distinto de quien hizo el cierre recurrido |
+| `review_notes` | string(2000) | Propuesta interna de quien revisa |
+| `resolver_staff_id` | uuid | Quien registró la decisión de la autoridad competente |
+| `result` | enum | `CONFIRMA`, `MODIFICA` o `REABRE`. Nulo mientras está pendiente |
+| `resolved_at` | instant | Nulo mientras está pendiente |
+
+A lo más un recurso pendiente por trámite.
 
 ### 4. Entidades de catalog
 
@@ -178,7 +205,7 @@ Un lugar donde se atiende a vecinos (EP3.5-16): `id`, `code` único, `name`, `ty
 ### 5. Entidades de field y notify
 
 - **`work_order` y `crew`** (field): ver [`field.md`](field.md), sección 3.
-- **`document`** (notify, EP3.5-11 y EP3.5-29): `id`, `request_id`, `type` (`COMPROBANTE` o `CERTIFICADO_RESOLUCION`; EP3.5-29 agrega los demás), `version` (empieza en 1 y sube al regenerar), `storage_key`, `sha256`, `source_event_id` (idempotencia) y `generated_at`. Único por `request_id`, `type` y `version`. EP3.5-29 suma el código de verificación.
+- **`document`** (notify, EP3.5-11 y EP3.5-29): `id`, `request_id`, `type` (el catálogo de [`documentos.md`](documentos.md), sección 2), `version` (empieza en 1 y sube al regenerar), `storage_key`, `sha256`, `source_event_id` (idempotencia) y `generated_at`. Único por `request_id`, `type` y `version`. EP3.5-29 suma el código de verificación.
 
 ### 6. Minimización
 
@@ -192,6 +219,8 @@ Un lugar donde se atiende a vecinos (EP3.5-16): `id`, `code` único, `name`, `ty
 | Poder del representante | S3, por `attachment` | El representante, el titular y el personal | No |
 | Dirección del trámite | `municipal_requests`; snapshot en `work_order_request` | Las partes, el personal y la cuadrilla asignada | No en Kafka (EP3-01, sección 8). Sí en la API de field |
 | Nombre del funcionario | `staff_member` | El personal. El vecino ve unidad y cargo | Como `actor.name` en los eventos, como hoy |
+| Antecedentes, fundamentos de un recurso y motivo de desistimiento escritos por el vecino | `municipal_requests` y `request_appeal`, o el historial | Las partes y el personal | No (`procedimiento-estados.md`, sección 8) |
+| Destino usado en una comunicación `FORMAL` | notify | El personal con acceso al trámite | No (`comunicaciones.md`, sección 4.6) |
 
 La retención y la anonimización de estos datos son de EP3.5-38. El inventario de tratamientos es de EP3.5-18.
 

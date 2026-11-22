@@ -53,6 +53,10 @@
 | Identidad interna y proveedores | [`contratos/identidad.md`](contratos/identidad.md) |
 | Servicio de terreno | [`contratos/field.md`](contratos/field.md) |
 | Integraciones diferidas | [`contratos/integraciones-diferidas.md`](contratos/integraciones-diferidas.md) |
+| Estados y transiciones del trámite | [`contratos/procedimiento-estados.md`](contratos/procedimiento-estados.md) |
+| Plazos del procedimiento, suspensión y prórroga | [`contratos/procedimiento-plazos.md`](contratos/procedimiento-plazos.md) |
+| Matriz de comunicaciones | [`contratos/comunicaciones.md`](contratos/comunicaciones.md) |
+| Catálogo de documentos | [`contratos/documentos.md`](contratos/documentos.md) |
 
 ## Decisiones
 

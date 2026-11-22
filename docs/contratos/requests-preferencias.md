@@ -4,7 +4,7 @@
 
 ### 1. Regla
 
-Cada usuario (clave `X-User-Id`) guarda si recibe avisos por correo. **Sin fila = habilitado** (opt-out). Si `emailEnabled` es `false`, requests **no publica** comandos `email.*` a RabbitMQ para los trámites de ese titular. Los comandos `certificate.*` (comprobante/certificado PDF) y `crew.ticket` **sí se publican**.
+Cada usuario (clave `X-User-Id`) guarda si recibe avisos por correo. **Sin fila = habilitado** (opt-out). Si `emailEnabled` es `false`, requests **no publica** comandos `email.*` a RabbitMQ para los trámites de ese titular. Los comandos `certificate.*` (comprobante/certificado PDF) y `crew.ticket` **sí se publican**. En EP3.5, la preferencia solo apaga las comunicaciones `INFORMATIVA`: las `FORMAL` siempre se envían ([`comunicaciones.md`](comunicaciones.md), sección 4.3).
 
 ### 2. Endpoints
 
