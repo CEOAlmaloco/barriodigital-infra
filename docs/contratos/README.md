@@ -28,3 +28,8 @@ Contratos vigentes extraídos de `decisiones.md` (EP3.5-01 / CAL-02). El conteni
 | Folio y asignación | [`requests-folio.md`](requests-folio.md) |
 | Plazos en días hábiles | [`requests-plazos.md`](requests-plazos.md) |
 | APIs de report y audit | [`report-audit.md`](report-audit.md) |
+| Mapa de contextos y límites de servicios | [`dominio-contextos.md`](dominio-contextos.md) |
+| Modelo de dominio ampliado | [`dominio-modelo.md`](dominio-modelo.md) |
+| Identidad interna y proveedores | [`identidad.md`](identidad.md) |
+| Servicio de terreno | [`field.md`](field.md) |
+| Integraciones diferidas | [`integraciones-diferidas.md`](integraciones-diferidas.md) |
