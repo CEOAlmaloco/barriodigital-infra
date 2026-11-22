@@ -186,17 +186,19 @@ El CSV de EP3-63 y cualquier vista futura usan las reglas de esta sección. El C
 |---|---|---|
 | **Vecino** | "Nuevo trámite" como acción principal. Sus 5 trámites abiertos más recientes, con folio, estado y "En atención" si tiene responsable. Conteo de abiertos y cerrados | requests: `open=true`, `size=5`, orden por `createdAt` descendente. Conteos con `open=true` y `open=false`, `size=1` y `totalElements` (EP3-30) |
 | **Funcionario** | Mis asignados abiertos, del más antiguo al más nuevo. Sin asignar, del más antiguo al más nuevo. Plazos por vencer y vencidos de mis asignados | requests: `assignee=me` y `assignee=none` con `open=true`, orden por `createdAt` ascendente. report: plazos con `assignee=me` |
-| **Admin** | KPIs resumidos con polling cada 5 s (K8). Trámites sin asignar (supervisión). Plazos vencidos de toda la comuna | report: KPIs y plazos. requests: `assignee=none` con `open=true` |
+| **Admin** | "Requiere atención": tipos activos con el cupo diario agotado y mensajes en las DLQ de RabbitMQ. KPIs resumidos con polling cada 5 s (K8). Trámites sin asignar (supervisión). Plazos vencidos de toda la comuna | catalog: tipos de trámite. mq-admin: colas. report: KPIs y plazos. requests: `assignee=none` con `open=true` |
 | **Auditor** | Últimos eventos de auditoría. Intervenciones del Admin de los últimos 7 días, con `interventionReason` visible | audit: búsqueda paginada con `actorRole=Admin` y los `eventType` de intervención (EP3-07, sección 5.4) |
 
 "Mis asignados" se ordena por antigüedad y no por plazo, porque requests no tiene la fecha límite: la calcula report (EP3-06). Cruzar las dos fuentes en el frontend rompería la paginación. Los plazos van en su propio bloque.
 
+"Requiere atención" muestra solo excepciones que el Admin puede resolver desde Administración: un tipo sin cupo hace que el BFF rechace sus admisiones, y un mensaje en una DLQ es un correo, ticket o certificado que no salió. Va primero porque es lo más urgente. No incluye las DLT de Kafka, porque kafka-admin no las cuenta sin leer cada una (EP3-03, sección 7.1, hasta 5 s por DLT), ni el estado de salud de los servicios, porque el BFF no expone un health agregado.
+
 Criterios:
 
 1. **Cada bloque carga y falla por separado.** Si report está caído, el Funcionario sigue viendo su bandeja de requests, y el bloque de plazos muestra "no disponible". Es el "sin bloquear el core" del caso base, llevado a la pantalla.
-2. **Estados vacíos explícitos por bloque**, por ejemplo "No tienes trámites asignados", distintos del estado "no disponible" cuando la fuente falla.
+2. **Estados vacíos explícitos por bloque**, por ejemplo "No tienes trámites asignados", distintos del estado "no disponible" cuando la fuente falla. "Requiere atención" es la excepción: si sus fuentes respondieron y no hay nada que atender, no se muestra. Si una falla, aparece con ese aviso y la opción de reintentar.
 3. **Polling solo en los KPIs del Admin** (K8). Se pausa con la pestaña oculta (`visibilitychange`), se detiene al salir de `/inicio`, y ante errores espera más entre intentos en vez de insistir cada 5 s. Los demás bloques cargan al entrar, con botón de actualizar y el `lastEventAt` donde la fuente es report.
-4. **Cada bloque enlaza a su vista completa** con los filtros en la URL (EP3-48). Por ejemplo, "Mis asignados" abre `/tramites` con `assignee=me` y `open=true`.
+4. **Cada bloque enlaza a su vista completa** con los filtros en la URL (EP3-48). Por ejemplo, "Mis asignados" abre `/tramites` con `assignee=me` y `open=true`, y la DLQ de "Requiere atención" abre `/administracion` con `section=rabbitmq` y `show=dlq`.
 5. **Sin rol o con más de un rol** no hay `/inicio`, sino la pantalla "sin acceso".
 
 ### 8. Auditoría de solo lectura
