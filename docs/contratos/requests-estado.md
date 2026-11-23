@@ -15,6 +15,8 @@
 | EN_TERRENO | RESUELTO |
 | EN_TERRENO | RECHAZADO |
 
+Esta tabla es la vigente. La máquina de estados de EP3.5, con la subsanación, la espera de cupo, el desistimiento, el cierre sin contacto, los duplicados, la derivación, la reapertura y los recursos, está en [`procedimiento-estados.md`](procedimiento-estados.md), y reemplaza a esta tabla a medida que la implementan EP3.5-23, 24, 30, 31, 32 y 35.
+
 RESUELTO, RECHAZADO y CANCELADO son estados terminales, sin transiciones salientes. RECHAZADO es alcanzable desde cualquier estado no terminal vía PUT `/status`, no solo desde EN_TERRENO. CANCELADO solo se alcanza con `POST /api/requests/{id}/cancel` (EP3-76) desde INGRESADO; no entra en la tabla de este PUT. Política de cupo: el cupo diario reservado al pasar a ADMITIDO (ver contrato de EP1.5-03) nunca se libera automáticamente por un rechazo o una cancelación posterior, la orquestación de cupo de EP1.5-18 solo participa en la transición INGRESADO a ADMITIDO.
 
 ### 2. Autorización

@@ -37,14 +37,14 @@ Los roles son los App Roles de Entra ID: `Admin`, `Funcionario`, `Vecino` y `Aud
 | Ver el estado del plazo (listado, detalle e `/inicio`) | No | Sí | Sí | Sí |
 | Administrar catálogo, cupos y plazos | No | No | Sí | No |
 | Administrar la mensajería (RabbitMQ y Kafka) | No | No | Sí | No |
-| Ver reportes (`/reports`) | No | Solo el mapa de trámites | Sí | Sí, solo lectura |
-| Ver auditoría (`/audit`) | No | No | Sí | Sí |
+| Ver reportes (`/reportes`) | No | Solo el mapa de trámites | Sí | Sí, solo lectura |
+| Ver auditoría (`/auditoria`) | No | No | Sí | Sí |
 
 Reglas que acompañan la matriz:
 
 1. **El Admin no toma trámites, los asigna.** Así "Mis asignados" y los KPIs por funcionario reflejan atención y no supervisión, y la lista de reasignación de EP3-05 queda sin ambigüedad. El destinatario de una asignación tiene que ser un Funcionario de esa lista, y EP3-05 define el error. El Admin igual puede operar cualquier trámite como intervención (sección 3).
 2. **El Auditor no tiene acciones.** Quien fiscaliza no opera.
-3. **Los indicadores de `/reports` son para el Admin y el Auditor.** Control interno revisa los indicadores de gestión. El Funcionario entra a `/reports` solo para el mapa de trámites (EP3-62), que le sirve para organizar el trabajo en terreno. Su vista principal sigue siendo la bandeja, y recibe los plazos de report en el listado, el detalle e `/inicio`.
+3. **Los indicadores de `/reportes` son para el Admin y el Auditor.** Control interno revisa los indicadores de gestión. El Funcionario entra a `/reportes` solo para el mapa de trámites (EP3-62), que le sirve para organizar el trabajo en terreno. Su vista principal sigue siendo la bandeja, y recibe los plazos de report en el listado, el detalle e `/inicio`.
 4. **Adjuntar después del alta:** nadie, en la prioridad Alta. Si entra EP3-64 (prioridad Media), el Vecino agrega fotos a un trámite abierto y ese contrato agrega su fila.
 5. **Funciones de prioridad Media y Baja** (comentario del vecino, cancelación, encuesta, exportación) agregan su fila en su propio contrato, si se cumple la fecha de corte del 17-nov.
 6. **Solo el Vecino crea.** requests también lo comprueba (principio 2): el staff que crea un trámite recibe 403 `Solo un Vecino puede crear un tramite`.
@@ -55,10 +55,13 @@ Reglas que acompañan la matriz:
 |---|---|
 | `/inicio` | Los cuatro roles |
 | `/tramites` y `/tramites/:id` | Los cuatro roles |
-| `/admin` | Admin |
-| `/reports` | Admin y Auditor. El Funcionario, solo el mapa de trámites |
-| `/audit` | Admin, Auditor |
-| `/no-access` (pantalla "sin acceso") | Sin rol, con más de un rol o con el token sin leer, con el motivo. Fuera del layout y sin navegación. Un rol válido que entra vuelve a `/inicio` |
+| `/administracion` | Admin |
+| `/reportes` | Admin y Auditor. El Funcionario, solo el mapa de trámites |
+| `/auditoria` | Admin, Auditor |
+| `/sin-acceso` (pantalla "sin acceso") | Sin rol, con más de un rol o con el token sin leer, con el motivo. Fuera del layout y sin navegación. Un rol válido que entra vuelve a `/inicio` |
+| `/legal/privacidad`, `/legal/accesibilidad` y `/legal/condiciones-de-uso` | Públicas, con o sin sesión. El pie de todas las pantallas las enlaza |
+
+Las rutas anteriores en inglés (`/admin`, `/reports`, `/reports/map`, `/audit` y `/no-access`) redirigen a las nuevas.
 
 **Roles por endpoint de report y audit** (EP3-07):
 
@@ -183,17 +186,19 @@ El CSV de EP3-63 y cualquier vista futura usan las reglas de esta sección. El C
 |---|---|---|
 | **Vecino** | "Nuevo trámite" como acción principal. Sus 5 trámites abiertos más recientes, con folio, estado y "En atención" si tiene responsable. Conteo de abiertos y cerrados | requests: `open=true`, `size=5`, orden por `createdAt` descendente. Conteos con `open=true` y `open=false`, `size=1` y `totalElements` (EP3-30) |
 | **Funcionario** | Mis asignados abiertos, del más antiguo al más nuevo. Sin asignar, del más antiguo al más nuevo. Plazos por vencer y vencidos de mis asignados | requests: `assignee=me` y `assignee=none` con `open=true`, orden por `createdAt` ascendente. report: plazos con `assignee=me` |
-| **Admin** | KPIs resumidos con polling cada 5 s (K8). Trámites sin asignar (supervisión). Plazos vencidos de toda la comuna | report: KPIs y plazos. requests: `assignee=none` con `open=true` |
+| **Admin** | "Requiere atención": tipos activos con el cupo diario agotado y mensajes en las DLQ de RabbitMQ. KPIs resumidos con polling cada 5 s (K8). Trámites sin asignar (supervisión). Plazos vencidos de toda la comuna | catalog: tipos de trámite. mq-admin: colas. report: KPIs y plazos. requests: `assignee=none` con `open=true` |
 | **Auditor** | Últimos eventos de auditoría. Intervenciones del Admin de los últimos 7 días, con `interventionReason` visible | audit: búsqueda paginada con `actorRole=Admin` y los `eventType` de intervención (EP3-07, sección 5.4) |
 
 "Mis asignados" se ordena por antigüedad y no por plazo, porque requests no tiene la fecha límite: la calcula report (EP3-06). Cruzar las dos fuentes en el frontend rompería la paginación. Los plazos van en su propio bloque.
 
+"Requiere atención" muestra solo excepciones que el Admin puede resolver desde Administración: un tipo sin cupo hace que el BFF rechace sus admisiones, y un mensaje en una DLQ es un correo, ticket o certificado que no salió. Va primero porque es lo más urgente. No incluye las DLT de Kafka, porque kafka-admin no las cuenta sin leer cada una (EP3-03, sección 7.1, hasta 5 s por DLT), ni el estado de salud de los servicios, porque el BFF no expone un health agregado.
+
 Criterios:
 
 1. **Cada bloque carga y falla por separado.** Si report está caído, el Funcionario sigue viendo su bandeja de requests, y el bloque de plazos muestra "no disponible". Es el "sin bloquear el core" del caso base, llevado a la pantalla.
-2. **Estados vacíos explícitos por bloque**, por ejemplo "No tienes trámites asignados", distintos del estado "no disponible" cuando la fuente falla.
+2. **Estados vacíos explícitos por bloque**, por ejemplo "No tienes trámites asignados", distintos del estado "no disponible" cuando la fuente falla. "Requiere atención" es la excepción: si sus fuentes respondieron y no hay nada que atender, no se muestra. Si una falla, aparece con ese aviso y la opción de reintentar.
 3. **Polling solo en los KPIs del Admin** (K8). Se pausa con la pestaña oculta (`visibilitychange`), se detiene al salir de `/inicio`, y ante errores espera más entre intentos en vez de insistir cada 5 s. Los demás bloques cargan al entrar, con botón de actualizar y el `lastEventAt` donde la fuente es report.
-4. **Cada bloque enlaza a su vista completa** con los filtros en la URL (EP3-48). Por ejemplo, "Mis asignados" abre `/tramites` con `assignee=me` y `open=true`.
+4. **Cada bloque enlaza a su vista completa** con los filtros en la URL (EP3-48). Por ejemplo, "Mis asignados" abre `/tramites` con `assignee=me` y `open=true`, y la DLQ de "Requiere atención" abre `/administracion` con `section=rabbitmq` y `show=dlq`.
 5. **Sin rol o con más de un rol** no hay `/inicio`, sino la pantalla "sin acceso".
 
 ### 8. Auditoría de solo lectura
@@ -203,7 +208,7 @@ audit es **de solo lectura y de solo agregar** para todos los roles, incluido el
 1. La API de audit no tiene endpoints de escritura (EP3-07), y el servicio no ejecuta `UPDATE` ni `DELETE` sobre su tabla.
 2. El Admin no puede impedir que sus acciones lleguen a Oracle desde kafka-admin: no puede eliminar `audit.timeline`, ni adelantar los offsets de `audit-group`, ni bajar `min.compaction.lag.ms` (EP3-03, secciones 3.3, 4 y 6.4).
 
-El Admin ve `/audit`, que registra sus propias acciones, y eso no debilita la segregación de funciones, porque no puede modificar lo registrado. El límite a nivel de base de datos está en la sección 10.
+El Admin ve `/auditoria`, que registra sus propias acciones, y eso no debilita la segregación de funciones, porque no puede modificar lo registrado. El límite a nivel de base de datos está en la sección 10.
 
 ### 9. Cambios por capa
 
@@ -221,7 +226,7 @@ El Admin ve `/audit`, que registra sus propias acciones, y eso no debilita la se
 | **report** | La proyección de estado por trámite guarda `assigneeId` de `request.assigned`. El endpoint de plazos acepta `assignee=me`. Roles por endpoint | EP3-36, EP3-37, EP3-38 |
 | **audit** | Filtro `actorRole` en la búsqueda. Roles Admin y Auditor. Sin escritura | EP3-42 |
 | **frontend**, `shared/models/role.ts` | `REQUESTS_ROLES` incluye los cuatro roles. `resolveAccess` cuenta solo los cuatro roles, igual que el BFF | EP3-49 |
-| **frontend**, `app.routes.ts` y header | `/reports` y `/audit` para Admin y Auditor. Navegación del rol del usuario. Pantalla "sin acceso" con el motivo, sin rol o con más de uno | EP3-49 |
+| **frontend**, `app.routes.ts` y header | `/reportes` y `/auditoria` para Admin y Auditor. Navegación del rol del usuario. Pantalla "sin acceso" con el motivo, sin rol o con más de uno | EP3-49 |
 | **frontend**, detalle | Acciones por rol y por responsable, "Tomar" como acción principal, campo de motivo para el Admin, "En atención" y "Municipalidad" para el Vecino | EP3-46 |
 | **frontend**, `/inicio` | Bloques de la sección 7 | EP3-52 |
 | **Contratos** | EP3-05 define tomar, reasignar, la lista de funcionarios y su orden de errores. EP3-07 define los roles por endpoint de report y audit, `assignee=me` y `actorRole` | EP3-05, EP3-07 |
@@ -231,7 +236,7 @@ El Admin ve `/audit`, que registra sus propias acciones, y eso no debilita la se
 
 1. **Ingreso asistido:** un funcionario de ventanilla u OIRS no puede ingresar un trámite a nombre de un vecino que llega en persona, aunque la Ley 19.880 lo contempla. Exige separar al solicitante del actor y capturar sus datos de contacto. Es un cambio de modelo en requests.
 2. **Sin segmentación por unidad:** Entra ID entrega el rol, no la oficina ni el sector del funcionario. Todos los funcionarios ven todos los trámites de la comuna. Mejora futura: un grupo de Entra ID o un atributo por unidad.
-3. **Plazo para el Vecino** (actualizado por EP3-06): ve el plazo en días hábiles (`slaBusinessDays`), no la fecha límite ni el estado del plazo, que calcula report. Mejora futura: mostrarle `dueDate` (EP3-06, límite 6).
+3. **Plazo para el Vecino** (actualizado por EP3-06): ve el plazo en días hábiles (`slaBusinessDays`), no la fecha límite ni el estado del plazo, que calcula report. Mejora futura: mostrarle `dueDate`, como fecha comprometida ([`procedimiento-plazos.md`](procedimiento-plazos.md), sección 6; EP3.5-22).
 4. **Evidencia de resolución:** el Funcionario no adjunta una foto del trabajo terminado.
 5. **Colaboración entre funcionarios:** otro Funcionario no puede registrar una gestión en un trámite ajeno. El responsable reasigna, o el Admin interviene.
 6. **Abstención (artículo 12 de la Ley 19.880):** la plataforma no detecta conflictos de interés. Con un rol por usuario, un Funcionario o un Admin no puede ser solicitante al crear, y el único caso posible es que el rol de un usuario cambie en Entra ID después de ingresar un trámite. Las causales de abstención dependen de la declaración del funcionario.

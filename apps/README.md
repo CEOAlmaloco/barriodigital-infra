@@ -91,7 +91,7 @@ Plantilla en `.env.example`; los valores de Entra ID están en `../docs/decision
 
 ## Puertos
 
-- **BFF, 8080.** En producción el front no lo llama directo: las peticiones entran por el API Gateway, que las reenvía a este puerto (ver `../docs/decisiones.md`).
+- **BFF, 8080.** En producción el front no lo llama directo: las peticiones entran por el API Gateway, que las reenvía a este puerto (ver `../docs/operacion/despliegue-aws.md`).
 - **requests, 8081.** Los dos compose lo publican en el host (sirve para el health check local), así que en la EC2 el security group no debe abrir el 8081, solo el 8080.
 - **catalog, 8082.** Solo `expose`, sin `ports`. No se abre en el security group. El health se mira dentro del contenedor: `docker compose exec catalog curl -f http://localhost:8082/actuator/health`.
 - **notify, 8083.** Solo `expose`, sin `ports`, rutas públicas, BFF ni API Gateway. `docker compose exec notify curl -fsS http://localhost:8083/actuator/health`.
@@ -207,3 +207,20 @@ Esta revisión es manual: corregir cualquier recurso o enlace faltante antes de 
 el orden entre servicios.
 
 Las pruebas y el resumen de integración se documentan en el repo `ms-barriodigital-requests` → `README.md`.
+
+## Carga de demostración
+
+Con apps, mq y kafka levantados, desde la raíz del repo:
+
+```powershell
+.\apps\scripts\seed-demo.ps1                       # todo
+.\apps\scripts\seed-demo.ps1 -Target requests -Count 20
+```
+
+| `-Target` | Qué hace | Dónde se ve |
+|---|---|---|
+| `requests` | Crea `-Count` trámites (12 por omisión) por la API de requests a nombre de un vecino de prueba y cancela uno de cada cuatro. Salen los eventos de Kafka y los comandos de RabbitMQ del flujo real | `/tramites`, Inicio, Reportes y Auditoría |
+| `rabbit` | Publica en `cmd.topic` y `cmd.direct` un comando por cola sin un dato obligatorio. notify lo rechaza y queda en la DLQ con sus headers `x-death` | Administración → RabbitMQ |
+| `kafka` | Produce 3 mensajes sin `eventType` en `requests.events` (demo "Malformado" de [`docs/kafka.md`](../docs/kafka.md)). report y audit los envían a su DLT | Administración → Kafka |
+
+Los trámites no pasan por el BFF, igual que la colección de Postman: no llevan plazo (`slaBusinessDays` nulo) porque el plazo lo copia el BFF desde catalog. Al no admitirse, no reservan cupo. La carga no escribe en `audit.timeline`; lo que se ve en Auditoría son los eventos reales de esos trámites.

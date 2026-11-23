@@ -8,6 +8,8 @@
 |---|---|
 | [`operacion/README.md`](operacion/README.md) | Índice de operación |
 | [`operacion/despliegue-aws.md`](operacion/despliegue-aws.md) | Despliegue AWS / Gateway / EC2 |
+| [`operacion/identidad-personal-mfa.md`](operacion/identidad-personal-mfa.md) | MFA del personal, aprobación de roles y revisión de accesos |
+| [`operacion/plan-memoria-apps.md`](operacion/plan-memoria-apps.md) | Reparto de memoria de la EC2 de apps |
 | [`arquitectura.md`](arquitectura.md) | Arquitectura desplegada |
 | [`kafka.md`](kafka.md) | Guía Kafka |
 | [`rabbitmq.md`](rabbitmq.md) | Recorrido Rabbit en lab |
@@ -15,7 +17,6 @@
 | [`matriz-funcionalidades.md`](matriz-funcionalidades.md) | Estado vs `develop` |
 | [`evidencias/`](evidencias/) | Evidencias de demo |
 | [`checklist-parcial-5.md`](checklist-parcial-5.md) | Checklist Parcial 5 |
-| [`guion-demo.md`](guion-demo.md) | Guion de demo |
 
 ## Contratos por tema
 
@@ -47,6 +48,15 @@
 | Folio y asignación | [`contratos/requests-folio.md`](contratos/requests-folio.md) |
 | Plazos en días hábiles | [`contratos/requests-plazos.md`](contratos/requests-plazos.md) |
 | APIs de report y audit | [`contratos/report-audit.md`](contratos/report-audit.md) |
+| Mapa de contextos y límites de servicios | [`contratos/dominio-contextos.md`](contratos/dominio-contextos.md) |
+| Modelo de dominio ampliado | [`contratos/dominio-modelo.md`](contratos/dominio-modelo.md) |
+| Identidad interna y proveedores | [`contratos/identidad.md`](contratos/identidad.md) |
+| Servicio de terreno | [`contratos/field.md`](contratos/field.md) |
+| Integraciones diferidas | [`contratos/integraciones-diferidas.md`](contratos/integraciones-diferidas.md) |
+| Estados y transiciones del trámite | [`contratos/procedimiento-estados.md`](contratos/procedimiento-estados.md) |
+| Plazos del procedimiento, suspensión y prórroga | [`contratos/procedimiento-plazos.md`](contratos/procedimiento-plazos.md) |
+| Matriz de comunicaciones | [`contratos/comunicaciones.md`](contratos/comunicaciones.md) |
+| Catálogo de documentos | [`contratos/documentos.md`](contratos/documentos.md) |
 
 ## Decisiones
 
